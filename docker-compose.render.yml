@@ -21,8 +21,8 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: ./Dockerfile
+      context: .
+      dockerfile: Dockerfile.backend
     container_name: cbild-backend
     depends_on:
       mysql:
@@ -37,8 +37,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: ./Dockerfile
+      context: .
+      dockerfile: Dockerfile.frontend
     container_name: cbild-frontend
     depends_on:
       - backend
