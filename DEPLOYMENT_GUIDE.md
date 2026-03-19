@@ -6,56 +6,65 @@ Your application is now production-ready with a professional glassmorphic UI. He
 
 ---
 
-## Option 1: Railway.app (Recommended - Free Tier)
+## Option 1: Render.com (Recommended - Best Docker Compose Support)
 
-**Why Railway?** Free tier includes free hours, automatic GitHub deployment, and simple UI.
-
-### Steps:
-1. **Create Railway Account:**
-   - Go to [railway.app](https://railway.app)
-   - Sign in with GitHub
-   - Create new project
-
-2. **Deploy from GitHub:**
-   - Select "Deploy from GitHub"
-   - Authorize and select the `cb-ild` repository
-   - Railway auto-detects Docker Compose
-   - Click "Deploy"
-
-3. **Configure Environment:**
-   - Add environment variables in Railway dashboard:
-     ```
-     SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/cbild
-     SPRING_DATASOURCE_USERNAME=root
-     SPRING_DATASOURCE_PASSWORD=root
-     ```
-
-4. **Access Your App:**
-   - Railway provides a public URL
-   - Navigate to the URL in your browser
-
----
-
-## Option 2: Render.com (Free with Card Required)
+**Why Render?** Best support for docker-compose.yml, easiest setup, free tier available.
 
 ### Steps:
 1. **Create Render Account:**
    - Go to [render.com](https://render.com)
    - Sign up with GitHub
 
-2. **Create New Service:**
-   - Click "New +" → "Web Service"
-   - Select your GitHub repository
-   - Choose "Docker" runtime
+2. **Deploy with Blueprint:**
+   - Click "New" → "Blueprint"
+   - Select the `cb-ild` repository
+   - Render auto-detects `docker-compose.yml`
 
-3. **Configure:**
-   - Root Directory: `.`
-   - Build Command: `docker-compose build`
-   - Start Command: `docker-compose up`
+3. **Configuration:**
+   - Render automatically creates all 3 services (MySQL, Backend, Frontend)
+   - Handles networking between services
+   - Sets up environment variables
 
 4. **Deploy:**
-   - Click "Create Web Service"
-   - Wait for deployment (5-10 minutes)
+   - Click "Create"
+   - Wait 10-15 minutes for deployment
+   - Render provides your live URL
+
+5. **Access Your App:**
+   - Frontend URL will be shown in Render dashboard
+   - Login with demo credentials
+   - Everything should work automatically
+
+---
+
+## Option 2: Railway.app (Manual Service Setup)
+
+**Note:** Railway no longer auto-detects docker-compose. You must create services individually.
+
+### Steps:
+1. **Create Railway Account:**
+   - Go to [railway.app](https://railway.app)
+   - Sign in with GitHub
+
+2. **Add MySQL Database:**
+   - Create new project
+   - Click "Add Service" → "Provision MySQL"
+   - Wait for MySQL to start
+
+3. **Add Backend Service:**
+   - Click "Add Service" → "Deploy from GitHub"
+   - Select `cb-ild` repository
+   - Set root directory: `backend`
+   - Add environment variables (Railway provides MySQL details)
+
+4. **Add Frontend Service:**
+   - Click "Add Service" → "Deploy from GitHub"
+   - Select `cb-ild` repository
+   - Set root directory: `frontend`
+
+5. **Get Live URL:**
+   - Railway provides individual URLs for each service
+   - Frontend URL is what you share
 
 ---
 
