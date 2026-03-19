@@ -1,0 +1,135 @@
+package org.mifos.cbild.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+
+// ─── Bureau Feedback ─────────────────────────────────────────────────────────
+@Entity @Table(name = "bureau_feedback")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class BureauFeedback {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "submission_id") private Submission submission;
+    @Column(name = "error_code")    private String errorCode;
+    @Enumerated(EnumType.STRING) @Column(name = "error_category") private ErrorCategory errorCategory;
+    @Column(name = "error_message", length = 1000) private String errorMessage;
+    @Column(name = "affected_field") private String affectedField;
+    @Enumerated(EnumType.STRING) private Severity severity;
+    private Boolean resolved;
+    @CreationTimestamp @Column(name = "created_at", updatable = false) private LocalDateTime createdAt;
+
+    public enum ErrorCategory { INVALID_ID, DATE_INCONSISTENCY, MISSING_FIELD, DUPLICATE, MATCH_FAILURE, OTHER }
+    public enum Severity { ERROR, WARNING, INFO }
+}
+
+// ─── Bureau Record ───────────────────────────────────────────────────────────
+@Entity @Table(name = "bureau_records")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class BureauRecord {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @OneToOne(fetch = FetchType.LAZY) @JoinColumn(name = "client_id") private Client client;
+    @Enumerated(EnumType.STRING) @Column(name = "match_confidence") private MatchConfidence matchConfidence;
+    @Column(name = "match_score") private BigDecimal matchScore;
+    @Enumerated(EnumType.STRING) @Column(name = "bureau_status") private BureauStatus bureauStatus;
+    @Column(name = "bureau_id") private String bureauId;
+    @Column(name = "last_reported_date") private LocalDate lastReportedDate;
+    @Column(name = "retention_years") private Integer retentionYears;
+    @Column(name = "closure_date") private LocalDate closureDate;
+    @Column(name = "negative_countdown_months") private Integer negativeCountdownMonths;
+    @Column(name = "bureau_raw_response", columnDefinition = "LONGTEXT") private String bureauRawResponse;
+    @CreationTimestamp @Column(name = "created_at", updatable = false) private LocalDateTime createdAt;
+    @UpdateTimestamp   @Column(name = "updated_at")                    private LocalDateTime updatedAt;
+
+    public enum MatchConfidence { HIGH, MEDIUM, LOW }
+    public enum BureauStatus { ACTIVE, CLOSED, NEGATIVE, UNKNOWN }
+}
+
+// ─── Dispute ─────────────────────────────────────────────────────────────────
+@Entity @Table(name = "disputes")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Dispute {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "client_id") private Client client;
+    @Column(name = "case_reference", unique = true) private String caseReference;
+    @Enumerated(EnumType.STRING) @Column(name = "dispute_type") private DisputeType disputeType;
+    @Enumerated(EnumType.STRING) private DisputeStatus status;
+    @Column(length = 2000) private String description;
+    @Column(name = "institution_value", length = 500) private String institutionValue;
+    @Column(name = "bureau_value", length = 500)      private String bureauValue;
+    @Column(name = "disputed_field") private String disputedField;
+    @Column(name = "resolution_notes", length = 2000) private String resolutionNotes;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "assigned_to") private User assignedTo;
+    @Column(name = "opened_at")   private LocalDateTime openedAt;
+    @Column(name = "resolved_at") private LocalDateTime resolvedAt;
+    @OneToMany(mappedBy = "dispute", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<DisputeAuditLog> auditLogs;
+
+    public enum DisputeType { WRONG_BALANCE, WRONG_STATUS, IDENTITY_MISMATCH, DUPLICATE_TRADELINE, OTHER }
+    public enum DisputeStatus { OPEN, UNDER_REVIEW, RESOLVED, REJECTED }
+}
+
+// ─── Dispute Audit Log ───────────────────────────────────────────────────────
+@Entity @Table(name = "dispute_audit_log")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class DisputeAuditLog {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "dispute_id") private Dispute dispute;
+    private String action;
+    @Column(name = "old_status") private String oldStatus;
+    @Column(name = "new_status") private String newStatus;
+    @Column(length = 1000) private String notes;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "performed_by") private User performedBy;
+    @Column(name = "performed_at") private LocalDateTime performedAt;
+}
+
+// ─── Alert ───────────────────────────────────────────────────────────────────
+@Entity @Table(name = "alerts")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class Alert {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "client_id") private Client client;
+    @Enumerated(EnumType.STRING) @Column(name = "alert_type") private AlertType alertType;
+    @Enumerated(EnumType.STRING) private AlertSeverity severity;
+    @Column(nullable = false, length = 300) private String title;
+    @Column(length = 1000) private String description;
+    private Boolean acknowledged;
+    @Column(name = "acknowledged_at") private LocalDateTime acknowledgedAt;
+    @CreationTimestamp @Column(name = "created_at", updatable = false) private LocalDateTime createdAt;
+
+    public enum AlertType { SCORE_DROP, NEW_DELINQUENCY, EARLY_DEFAULT, SUBMISSION_REJECTED, KYC_GAP }
+    public enum AlertSeverity { HIGH, MEDIUM, LOW }
+}
+
+// ─── Inquiry Log ─────────────────────────────────────────────────────────────
+@Entity @Table(name = "inquiry_log")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class InquiryLog {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "client_id") private Client client;
+    @Enumerated(EnumType.STRING) @Column(name = "inquiry_type") private InquiryType inquiryType;
+    @Column(name = "inquiry_source", length = 200) private String inquirySource;
+    @Column(length = 200) private String purpose;
+    @Column(name = "inquiry_date") private LocalDate inquiryDate;
+    @CreationTimestamp @Column(name = "created_at", updatable = false) private LocalDateTime createdAt;
+
+    public enum InquiryType { HARD, SOFT }
+}
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+@Entity @Table(name = "audit_log")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+public class AuditLog {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
+    @Column(name = "entity_type", nullable = false, length = 50) private String entityType;
+    @Column(name = "entity_id",   nullable = false)              private Long entityId;
+    @Column(nullable = false, length = 100) private String action;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "performed_by") private User performedBy;
+    @Column(name = "ip_address", length = 45) private String ipAddress;
+    @Column(columnDefinition = "TEXT") private String detail;
+    @CreationTimestamp @Column(name = "performed_at", updatable = false) private LocalDateTime performedAt;
+}
