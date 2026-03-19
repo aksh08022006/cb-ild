@@ -1,10 +1,12 @@
 @use '@angular/material' as mat;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @include mat.core();
 
-$primary: mat.define-palette(mat.$blue-palette, 800);
-$accent:  mat.define-palette(mat.$orange-palette, 600);
-$warn:    mat.define-palette(mat.$red-palette);
+// Mifos-inspired color palette with modern accents
+$primary: mat.define-palette(mat.$indigo-palette, 600);
+$accent: mat.define-palette(mat.$cyan-palette, 500);
+$warn: mat.define-palette(mat.$red-palette, 500);
 
 $theme: mat.define-light-theme((
   color: (primary: $primary, accent: $accent, warn: $warn),
@@ -14,21 +16,251 @@ $theme: mat.define-light-theme((
 
 @include mat.all-component-themes($theme);
 
-* { box-sizing: border-box; }
+// ============ GLOBAL STYLES ============
+* {
+  box-sizing: border-box;
+}
 
 html, body {
   height: 100%;
   margin: 0;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
-  background: #F5F5F5;
+  padding: 0;
+  font-family: 'Inter', 'Roboto', 'Helvetica Neue', sans-serif;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  background-attachment: fixed;
+  color: #1e293b;
+  overflow-x: hidden;
 }
 
-h2 { font-weight: 500; }
+// ============ GLASSMORPHISM EFFECTS ============
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+}
 
+.glass-dark {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  color: #f8fafc;
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 20px 60px 0 rgba(31, 38, 135, 0.15),
+              inset 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+// ============ TYPOGRAPHY ============
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+h1 {
+  font-size: 2.5rem;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 1.875rem;
+  margin: 24px 0 16px 0;
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin: 16px 0 12px 0;
+}
+
+p {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #475569;
+}
+
+small {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+// ============ MATERIAL COMPONENTS ============
 mat-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 10px 40px rgba(31, 38, 135, 0.1) !important;
   margin-bottom: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    box-shadow: 0 20px 60px rgba(31, 38, 135, 0.2) !important;
+    transform: translateY(-4px);
+  }
 }
 
 .mat-mdc-card-content:last-child {
   padding-bottom: 16px !important;
+}
+
+mat-button, mat-raised-button {
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+  }
+}
+
+mat-form-field {
+  width: 100%;
+  
+  .mat-mdc-text-field-wrapper {
+    padding-bottom: 1.25rem;
+  }
+}
+
+// ============ BUTTONS ============
+.btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+
+  &.btn-primary {
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+    color: white;
+    box-shadow: 0 4px 20px rgba(79, 70, 229, 0.3);
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(79, 70, 229, 0.4);
+    }
+  }
+
+  &.btn-secondary {
+    background: rgba(255, 255, 255, 0.7);
+    color: #0f172a;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+  }
+}
+
+// ============ BADGES & TAGS ============
+.badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+
+  &.badge-success {
+    background: rgba(34, 197, 94, 0.15);
+    color: #15803d;
+  }
+
+  &.badge-warning {
+    background: rgba(251, 146, 60, 0.15);
+    color: #9a3412;
+  }
+
+  &.badge-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #991b1b;
+  }
+
+  &.badge-info {
+    background: rgba(59, 130, 246, 0.15);
+    color: #1e40af;
+  }
+}
+
+// ============ SECTIONS ============
+section {
+  padding: 40px 0;
+}
+
+.section-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 32px;
+  color: #0f172a;
+}
+
+// ============ GRID & SPACING ============
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.grid {
+  display: grid;
+  gap: 24px;
+
+  &.grid-2 {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  &.grid-3 {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+}
+
+// ============ UTILITIES ============
+.mt-8 { margin-top: 32px; }
+.mb-8 { margin-bottom: 32px; }
+.mt-4 { margin-top: 16px; }
+.mb-4 { margin-bottom: 16px; }
+.p-4 { padding: 16px; }
+.p-6 { padding: 24px; }
+
+.text-center { text-align: center; }
+.text-muted { color: #64748b; }
+.text-light { color: #94a3b8; }
+
+// ============ SCROLLBAR ============
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(79, 70, 229, 0.5);
+  border-radius: 10px;
+
+  &:hover {
+    background: rgba(79, 70, 229, 0.7);
+  }
 }
