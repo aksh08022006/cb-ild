@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-class KycScoringService {
+public class KycScoringService {
 
     private final ClientRepository clientRepository;
     private final KycFieldRepository kycFieldRepository;
