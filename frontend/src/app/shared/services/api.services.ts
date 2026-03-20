@@ -162,13 +162,66 @@ export interface ClientSummaryDto {
   city: string; accountStatus: string; activationDate: string;
 }
 
+export interface ClientDetailDto {
+  id: number; fineractClientId: string; firstName: string; lastName: string;
+  fullName: string; dateOfBirth: string; gender: string; nationalId: string;
+  mobileNo: string; email: string; addressLine1: string; addressLine2: string;
+  city: string; state: string; postalCode: string; country: string;
+  activationDate: string; accountStatus: string;
+  kycCompleteness: number; kycReadinessLevel: string; bureauReadiness: string;
+  createdAt: string; updatedAt: string;
+}
+
+export interface CreateClientRequest {
+  fineractClientId: string; firstName: string; lastName: string;
+  dateOfBirth: string; gender: string; nationalId: string;
+  mobileNo: string; email: string; addressLine1: string; addressLine2: string;
+  city: string; state: string; postalCode: string; country: string;
+  activationDate: string; accountStatus: string;
+}
+
+export interface ValidationWarning {
+  severity: string; fieldName: string; message: string; recommendation: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ClientApiService {
   private api = inject(ApiService);
+  
   getAll(): Observable<ClientSummaryDto[]> {
     return this.api.get<ClientSummaryDto[]>('/clients');
   }
+
   getById(id: number): Observable<ClientSummaryDto> {
     return this.api.get<ClientSummaryDto>(`/clients/${id}`);
   }
+
+  getDetails(id: number): Observable<ClientDetailDto> {
+    return this.api.get<ClientDetailDto>(`/clients/${id}/details`);
+  }
+
+  create(request: CreateClientRequest): Observable<ClientDetailDto> {
+    return this.api.post<ClientDetailDto>('/clients', request);
+  }
+
+  update(id: number, request: CreateClientRequest): Observable<ClientDetailDto> {
+    return this.http.put<ApiResponse<ClientDetailDto>>(`${BASE}/clients/${id}`, request)
+      .pipe(map(r => r.data));
+  }
+
+  delete(id: number): Observable<string> {
+    return this.http.delete<ApiResponse<string>>(`${BASE}/clients/${id}`)
+      .pipe(map(r => r.data));
+  }
+
+  search(query: string): Observable<ClientSummaryDto[]> {
+    return this.api.get<ClientSummaryDto[]>(`/clients/search?q=${encodeURIComponent(query)}`);
+  }
+
+  validate(id: number, request: CreateClientRequest): Observable<ValidationWarning[]> {
+    return this.http.post<ApiResponse<ValidationWarning[]>>(`${BASE}/clients/${id}/validate`, request)
+      .pipe(map(r => r.data));
+  }
+
+  private http = inject(HttpClient);
 }

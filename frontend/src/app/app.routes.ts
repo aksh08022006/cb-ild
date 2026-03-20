@@ -18,6 +18,14 @@ export const routes: Routes = [
         loadComponent: () => import('./modules/clients/clients.component').then(m => m.ClientsComponent)
       },
       {
+        path: 'add-client',
+        loadComponent: () => import('./modules/add-client/add-client.component').then(m => m.AddClientComponent)
+      },
+      {
+        path: 'add-client/:id',
+        loadComponent: () => import('./modules/add-client/add-client.component').then(m => m.AddClientComponent)
+      },
+      {
         path: 'kyc/:clientId',
         loadComponent: () => import('./modules/kyc-completeness/kyc-completeness.component').then(m => m.KycCompletenessComponent)
       },

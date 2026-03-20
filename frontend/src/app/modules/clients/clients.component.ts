@@ -17,15 +17,27 @@ import { ClientApiService, ClientSummaryDto } from '../../shared/services/api.se
             MatIconModule, MatChipsModule, MatTooltipModule, MatProgressBarModule],
   template: `
     <div class="page-header">
-      <h2>Client Registry</h2>
-      <p>Select a client to view their credit bureau lifecycle</p>
+      <div class="header-content">
+        <div>
+          <h2>Client Registry</h2>
+          <p>Select a client to view their credit bureau lifecycle</p>
+        </div>
+        <button mat-raised-button color="primary" (click)="addClient()">
+          <mat-icon>add</mat-icon> Add New Client
+        </button>
+      </div>
     </div>
 
     <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
 
     <mat-card>
       <mat-card-content>
-        <table mat-table [dataSource]="clients" class="full-width">
+        <div *ngIf="clients.length === 0 && !loading" class="no-clients">
+          <mat-icon>person_outline</mat-icon>
+          <p>No clients found. <a (click)="addClient()" style="cursor: pointer; color: #1565C0;">Add your first client</a></p>
+        </div>
+        
+        <table *ngIf="clients.length > 0" mat-table [dataSource]="clients" class="full-width">
           <ng-container matColumnDef="id">
             <th mat-header-cell *matHeaderCellDef>Fineract ID</th>
             <td mat-cell *matCellDef="let c">
@@ -51,6 +63,9 @@ import { ClientApiService, ClientSummaryDto } from '../../shared/services/api.se
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef>Actions</th>
             <td mat-cell *matCellDef="let c">
+              <button mat-icon-button matTooltip="View Profile" (click)="viewClient(c.id)">
+                <mat-icon>open_in_new</mat-icon>
+              </button>
               <button mat-icon-button matTooltip="KYC Score" (click)="go('kyc',c.id)" color="primary">
                 <mat-icon>verified_user</mat-icon>
               </button>
@@ -63,6 +78,9 @@ import { ClientApiService, ClientSummaryDto } from '../../shared/services/api.se
               <button mat-icon-button matTooltip="Disputes" (click)="go('disputes',c.id)">
                 <mat-icon>gavel</mat-icon>
               </button>
+              <button mat-icon-button matTooltip="Edit" (click)="editClient(c.id)">
+                <mat-icon>edit</mat-icon>
+              </button>
             </td>
           </ng-container>
           <tr mat-header-row *matHeaderRowDef="cols"></tr>
@@ -72,12 +90,37 @@ import { ClientApiService, ClientSummaryDto } from '../../shared/services/api.se
     </mat-card>
   `,
   styles: [`
-    .page-header { margin-bottom:1.5rem; }
-    .page-header h2 { margin:0; font-size:1.5rem; color:#1565C0; }
-    .page-header p  { margin:4px 0 0; color:#666; }
-    .full-width { width:100%; }
-    .hover-row:hover { background:#E3F2FD; cursor:pointer; }
-    code { background:#F5F5F5; padding:2px 6px; border-radius:4px; font-size:0.85rem; }
+    .page-header { 
+      margin-bottom: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      gap: 2rem;
+    }
+    .page-header h2 { margin: 0; font-size: 1.5rem; color: #1565C0; }
+    .page-header p  { margin: 4px 0 0; color: #666; }
+    .full-width { width: 100%; }
+    .hover-row:hover { background: #E3F2FD; cursor: pointer; }
+    code { background: #F5F5F5; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+    
+    .no-clients {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #999;
+    }
+    .no-clients mat-icon {
+      font-size: 48px;
+      width: 48px;
+      height: 48px;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
   `]
 })
 export class ClientsComponent implements OnInit {
@@ -88,10 +131,26 @@ export class ClientsComponent implements OnInit {
   cols = ['id','name','city','status','actions'];
 
   ngOnInit() {
+    this.loadClients();
+  }
+
+  private loadClients() {
     this.clientApi.getAll().subscribe({
       next: d => { this.clients = d; this.loading = false; },
       error: () => { this.loading = false; }
     });
+  }
+
+  addClient() {
+    this.router.navigate(['/dashboard/add-client']);
+  }
+
+  editClient(id: number) {
+    this.router.navigate(['/dashboard/add-client', id]);
+  }
+
+  viewClient(id: number) {
+    this.router.navigate(['/dashboard/clients', id]);
   }
 
   go(module: string, id: number) {
