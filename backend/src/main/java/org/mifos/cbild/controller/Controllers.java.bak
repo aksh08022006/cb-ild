@@ -17,7 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Module 1 — KYC Completeness", description = "KYC scoring, field status, Metro 2 preview")
-public class KycController {
+class KycController {
 
     private final KycScoringService kycScoringService;
 
@@ -42,7 +42,7 @@ public class KycController {
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Module 2 — Submission Dashboard", description = "Reporting cycles, submission status, batch management")
-public class SubmissionController {
+class SubmissionController {
 
     private final SubmissionService submissionService;
 
@@ -81,7 +81,7 @@ public class SubmissionController {
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Module 3 — Bureau Processing Monitor", description = "Match confidence, validation feedback, retention status")
-public class BureauMonitorController {
+class BureauMonitorController {
 
     private final BureauMonitorService bureauMonitorService;
 
@@ -99,7 +99,7 @@ public class BureauMonitorController {
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Module 4 — Data Usage Insights", description = "Inquiry logs, monitoring alerts, credit profile")
-public class InsightsController {
+class InsightsController {
 
     private final InsightsService insightsService;
 
@@ -117,7 +117,7 @@ public class InsightsController {
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Module 5 — Dispute Resolution", description = "Case manager, audit trail, dispute workflow")
-public class DisputeController {
+class DisputeController {
 
     private final DisputeService disputeService;
 
@@ -158,7 +158,7 @@ public class DisputeController {
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Authentication", description = "JWT login")
-public class AuthController {
+class AuthController {
 
     private final AuthService authService;
 
@@ -175,7 +175,7 @@ public class AuthController {
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Clients", description = "Client listing and search")
-public class ClientController {
+class ClientController {
 
     private final ClientService clientService;
 

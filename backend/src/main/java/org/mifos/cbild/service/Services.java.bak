@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AuditServiceImpl implements AuditService {
+class AuditServiceImpl implements AuditService {
     private final AuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
 
@@ -48,7 +48,7 @@ public class AuditServiceImpl implements AuditService {
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class SubmissionServiceImpl implements SubmissionService {
+class SubmissionServiceImpl implements SubmissionService {
     private final SubmissionRepository submissionRepository;
     private final ClientRepository clientRepository;
     private final AuditService auditService;
@@ -142,7 +142,7 @@ public class SubmissionServiceImpl implements SubmissionService {
 // ─── Bureau Monitor Service ───────────────────────────────────────────────────
 @Service
 @RequiredArgsConstructor
-public class BureauMonitorServiceImpl implements BureauMonitorService {
+class BureauMonitorServiceImpl implements BureauMonitorService {
     private final BureauRecordRepository bureauRecordRepository;
     private final BureauFeedbackRepository bureauFeedbackRepository;
     private final ClientRepository clientRepository;
@@ -184,7 +184,7 @@ public class BureauMonitorServiceImpl implements BureauMonitorService {
 // ─── Insights Service ─────────────────────────────────────────────────────────
 @Service
 @RequiredArgsConstructor
-public class InsightsServiceImpl implements InsightsService {
+class InsightsServiceImpl implements InsightsService {
     private final InquiryLogRepository inquiryLogRepository;
     private final AlertRepository alertRepository;
     private final ClientRepository clientRepository;
@@ -234,7 +234,7 @@ public class InsightsServiceImpl implements InsightsService {
 @Service
 @RequiredArgsConstructor
 @Transactional
-public class DisputeServiceImpl implements DisputeService {
+class DisputeServiceImpl implements DisputeService {
     private final DisputeRepository disputeRepository;
     private final DisputeAuditLogRepository auditLogRepository;
     private final UserRepository userRepository;

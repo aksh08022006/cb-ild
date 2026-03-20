@@ -12,7 +12,7 @@ import java.util.List;
 // ─── Bureau Feedback ─────────────────────────────────────────────────────────
 @Entity @Table(name = "bureau_feedback")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-class BureauFeedback {
+public class BureauFeedback {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "submission_id") private Submission submission;
     @Column(name = "error_code")    private String errorCode;
@@ -30,7 +30,7 @@ class BureauFeedback {
 // ─── Bureau Record ───────────────────────────────────────────────────────────
 @Entity @Table(name = "bureau_records")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-class BureauRecord {
+public class BureauRecord {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @OneToOne(fetch = FetchType.LAZY) @JoinColumn(name = "client_id") private Client client;
     @Enumerated(EnumType.STRING) @Column(name = "match_confidence") private MatchConfidence matchConfidence;
@@ -52,7 +52,7 @@ class BureauRecord {
 // ─── Dispute ─────────────────────────────────────────────────────────────────
 @Entity @Table(name = "disputes")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-class Dispute {
+public class Dispute {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "client_id") private Client client;
     @Column(name = "case_reference", unique = true) private String caseReference;
@@ -76,7 +76,7 @@ class Dispute {
 // ─── Dispute Audit Log ───────────────────────────────────────────────────────
 @Entity @Table(name = "dispute_audit_log")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-class DisputeAuditLog {
+public class DisputeAuditLog {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "dispute_id") private Dispute dispute;
     private String action;
@@ -90,7 +90,7 @@ class DisputeAuditLog {
 // ─── Alert ───────────────────────────────────────────────────────────────────
 @Entity @Table(name = "alerts")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-class Alert {
+public class Alert {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "client_id") private Client client;
     @Enumerated(EnumType.STRING) @Column(name = "alert_type") private AlertType alertType;
@@ -108,7 +108,7 @@ class Alert {
 // ─── Inquiry Log ─────────────────────────────────────────────────────────────
 @Entity @Table(name = "inquiry_log")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-class InquiryLog {
+public class InquiryLog {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "client_id") private Client client;
     @Enumerated(EnumType.STRING) @Column(name = "inquiry_type") private InquiryType inquiryType;
@@ -123,7 +123,7 @@ class InquiryLog {
 // ─── Audit Log ───────────────────────────────────────────────────────────────
 @Entity @Table(name = "audit_log")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-class AuditLog {
+public class AuditLog {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY) private Long id;
     @Column(name = "entity_type", nullable = false, length = 50) private String entityType;
     @Column(name = "entity_id",   nullable = false)              private Long entityId;

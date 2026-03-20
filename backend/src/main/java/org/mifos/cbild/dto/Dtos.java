@@ -12,7 +12,7 @@ import java.util.List;
 
 // ─── KYC / Module 1 ──────────────────────────────────────────────────────────
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class KycScoreResponse {
+public class KycScoreResponse {
     private Long clientId;
     private String clientName;
     private String fineractClientId;
@@ -29,7 +29,7 @@ class KycScoreResponse {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class KycFieldDto {
+public class KycFieldDto {
     private String fieldName;
     private String fineractField;
     private String bureauField;
@@ -39,7 +39,7 @@ class KycFieldDto {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class Metro2PreviewResponse {
+public class Metro2PreviewResponse {
     private Long clientId;
     private String clientName;
     private List<Metro2FieldMapping> mappings;
@@ -48,7 +48,7 @@ class Metro2PreviewResponse {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class Metro2FieldMapping {
+public class Metro2FieldMapping {
     private String fineractField;
     private String bureauField;
     private String bureauFieldDescription;
@@ -59,7 +59,7 @@ class Metro2FieldMapping {
 
 // ─── Submission / Module 2 ───────────────────────────────────────────────────
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class SubmissionDto {
+public class SubmissionDto {
     private Long id;
     private String clientName;
     private String fineractClientId;
@@ -75,7 +75,7 @@ class SubmissionDto {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class SubmissionSummaryResponse {
+public class SubmissionSummaryResponse {
     private long totalSubmissions;
     private long accepted;
     private long rejected;
@@ -88,7 +88,7 @@ class SubmissionSummaryResponse {
 
 // ─── Bureau Monitor / Module 3 ───────────────────────────────────────────────
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class BureauMonitorResponse {
+public class BureauMonitorResponse {
     private Long clientId;
     private String clientName;
     private String matchConfidence;
@@ -103,7 +103,7 @@ class BureauMonitorResponse {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class BureauFeedbackDto {
+public class BureauFeedbackDto {
     private Long id;
     private String errorCode;
     private String errorCategory;
@@ -116,7 +116,7 @@ class BureauFeedbackDto {
 
 // ─── Data Insights / Module 4 ────────────────────────────────────────────────
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class InsightsResponse {
+public class InsightsResponse {
     private Long clientId;
     private String clientName;
     private List<InquiryDto> inquiries;
@@ -127,7 +127,7 @@ class InsightsResponse {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class InquiryDto {
+public class InquiryDto {
     private Long id;
     private String inquiryType;
     private String inquirySource;
@@ -136,7 +136,7 @@ class InquiryDto {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class AlertDto {
+public class AlertDto {
     private Long id;
     private String alertType;
     private String severity;
@@ -148,7 +148,7 @@ class AlertDto {
 
 // ─── Dispute Resolution / Module 5 ───────────────────────────────────────────
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class DisputeDto {
+public class DisputeDto {
     private Long id;
     private String clientName;
     private String fineractClientId;
@@ -167,7 +167,7 @@ class DisputeDto {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class DisputeAuditDto {
+public class DisputeAuditDto {
     private String action;
     private String oldStatus;
     private String newStatus;
@@ -177,14 +177,14 @@ class DisputeAuditDto {
 }
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class ResolveDisputeRequest {
+public class ResolveDisputeRequest {
     private String resolutionNotes;
     private String newStatus;
 }
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
-class ApiResponse<T> {
+public class ApiResponse<T> {
     private boolean success;
     private String message;
     private T data;
