@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-interface ClientRepository extends JpaRepository<Client, Long> {
+public interface ClientRepository extends JpaRepository<Client, Long> {
     Optional<Client> findByFineractClientId(String fineractClientId);
     List<Client> findByAccountStatus(Client.AccountStatus status);
 
@@ -20,7 +20,7 @@ interface ClientRepository extends JpaRepository<Client, Long> {
 }
 
 @Repository
-interface KycFieldRepository extends JpaRepository<KycField, Long> {
+public interface KycFieldRepository extends JpaRepository<KycField, Long> {
     List<KycField> findByClientId(Long clientId);
     List<KycField> findByClientIdAndStatus(Long clientId, KycField.KycStatus status);
 
@@ -32,7 +32,7 @@ interface KycFieldRepository extends JpaRepository<KycField, Long> {
 }
 
 @Repository
-interface SubmissionRepository extends JpaRepository<Submission, Long> {
+public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     List<Submission> findByClientIdOrderBySubmissionDateDesc(Long clientId);
     List<Submission> findByStatus(Submission.SubmissionStatus status);
 
@@ -44,18 +44,18 @@ interface SubmissionRepository extends JpaRepository<Submission, Long> {
 }
 
 @Repository
-interface BureauFeedbackRepository extends JpaRepository<BureauFeedback, Long> {
+public interface BureauFeedbackRepository extends JpaRepository<BureauFeedback, Long> {
     List<BureauFeedback> findBySubmissionId(Long submissionId);
     List<BureauFeedback> findBySubmissionClientIdAndResolved(Long clientId, Boolean resolved);
 }
 
 @Repository
-interface BureauRecordRepository extends JpaRepository<BureauRecord, Long> {
+public interface BureauRecordRepository extends JpaRepository<BureauRecord, Long> {
     Optional<BureauRecord> findByClientId(Long clientId);
 }
 
 @Repository
-interface DisputeRepository extends JpaRepository<Dispute, Long> {
+public interface DisputeRepository extends JpaRepository<Dispute, Long> {
     List<Dispute> findByClientIdOrderByOpenedAtDesc(Long clientId);
     List<Dispute> findByStatus(Dispute.DisputeStatus status);
     List<Dispute> findByStatusIn(List<Dispute.DisputeStatus> statuses);
@@ -63,25 +63,25 @@ interface DisputeRepository extends JpaRepository<Dispute, Long> {
 }
 
 @Repository
-interface DisputeAuditLogRepository extends JpaRepository<DisputeAuditLog, Long> {
+public interface DisputeAuditLogRepository extends JpaRepository<DisputeAuditLog, Long> {
     List<DisputeAuditLog> findByDisputeIdOrderByPerformedAtAsc(Long disputeId);
 }
 
 @Repository
-interface AlertRepository extends JpaRepository<Alert, Long> {
+public interface AlertRepository extends JpaRepository<Alert, Long> {
     List<Alert> findByClientIdOrderByCreatedAtDesc(Long clientId);
     List<Alert> findByClientIdAndAcknowledged(Long clientId, Boolean acknowledged);
     List<Alert> findByAcknowledgedFalseOrderByCreatedAtDesc();
 }
 
 @Repository
-interface InquiryLogRepository extends JpaRepository<InquiryLog, Long> {
+public interface InquiryLogRepository extends JpaRepository<InquiryLog, Long> {
     List<InquiryLog> findByClientIdOrderByInquiryDateDesc(Long clientId);
     List<InquiryLog> findByClientIdAndInquiryType(Long clientId, InquiryLog.InquiryType type);
 }
 
 @Repository
-interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
+public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     List<AuditLog> findByEntityTypeAndEntityIdOrderByPerformedAtDesc(String entityType, Long entityId);
 
     @Query("SELECT a FROM AuditLog a WHERE a.entityType = 'CLIENT' AND a.entityId = :cid ORDER BY a.performedAt DESC")
@@ -89,6 +89,6 @@ interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
 }
 
 @Repository
-interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
 }

@@ -37,7 +37,7 @@ import java.util.Date;
 
 // ─── JWT Service ─────────────────────────────────────────────────────────────
 @Service
-class JwtService {
+public class JwtService {
 
     @Value("${jwt.secret}")
     private String secret;
@@ -84,7 +84,7 @@ class JwtService {
 // ─── JWT Filter ──────────────────────────────────────────────────────────────
 @Component
 @RequiredArgsConstructor
-class JwtAuthFilter extends OncePerRequestFilter {
+public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
@@ -119,7 +119,7 @@ class JwtAuthFilter extends OncePerRequestFilter {
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
-class SecurityConfig {
+public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
@@ -160,7 +160,7 @@ class SecurityConfig {
 // ─── UserDetailsService ───────────────────────────────────────────────────────
 @Service
 @RequiredArgsConstructor
-class CbIldUserDetailsService implements UserDetailsService {
+public class CbIldUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
 
