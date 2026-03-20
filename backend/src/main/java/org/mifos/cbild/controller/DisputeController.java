@@ -17,38 +17,35 @@ import java.util.List;
 @RequestMapping("/api/disputes")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Module 5 — Dispute Resolution", description = "Case manager, audit trail, dispute workflow")
+@Tag(name = "Module 5 - Dispute Resolution")
 public class DisputeController {
 
     private final DisputeService disputeService;
 
     @GetMapping
-    @Operation(summary = "Get all disputes")
     @PreAuthorize("hasAnyRole('ADMIN','CREDIT_ANALYST','COMPLIANCE')")
-    public ResponseEntity<ApiResponse<List<DisputeDto>>> getAllDisputes() {
+    public ResponseEntity<ApiResponse<List<DisputeDto>>> getAll() {
         return ResponseEntity.ok(ApiResponse.ok(disputeService.getAllDisputes()));
     }
 
     @GetMapping("/client/{clientId}")
-    @Operation(summary = "Get all disputes for a specific client")
     @PreAuthorize("hasAnyRole('ADMIN','KYC_OFFICER','CREDIT_ANALYST','COMPLIANCE')")
     public ResponseEntity<ApiResponse<List<DisputeDto>>> getByClient(@PathVariable Long clientId) {
         return ResponseEntity.ok(ApiResponse.ok(disputeService.getByClientId(clientId)));
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get dispute detail with full audit trail")
     @PreAuthorize("hasAnyRole('ADMIN','CREDIT_ANALYST','COMPLIANCE')")
     public ResponseEntity<ApiResponse<DisputeDto>> getById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(disputeService.getById(id)));
     }
 
     @PostMapping("/{id}/resolve")
-    @Operation(summary = "Update dispute status — resolve, reject, or move to review")
+    @Operation(summary = "Update dispute status")
     @PreAuthorize("hasAnyRole('ADMIN','CREDIT_ANALYST','COMPLIANCE')")
     public ResponseEntity<ApiResponse<DisputeDto>> resolve(
             @PathVariable Long id,
             @RequestBody ResolveDisputeRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Dispute updated", disputeService.resolveDispute(id, request)));
+        return ResponseEntity.ok(ApiResponse.ok("Updated", disputeService.resolveDispute(id, request)));
     }
 }

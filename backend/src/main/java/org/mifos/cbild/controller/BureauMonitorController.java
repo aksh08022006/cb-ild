@@ -14,15 +14,15 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/bureau")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Module 3 — Bureau Processing Monitor", description = "Match confidence, validation feedback, retention status")
+@Tag(name = "Module 3 - Bureau Monitor")
 public class BureauMonitorController {
 
     private final BureauMonitorService bureauMonitorService;
 
     @GetMapping("/monitor/{clientId}")
-    @Operation(summary = "Get bureau processing status and match confidence for a client")
+    @Operation(summary = "Bureau processing status and match confidence")
     @PreAuthorize("hasAnyRole('ADMIN','CREDIT_ANALYST','COMPLIANCE')")
-    public ResponseEntity<ApiResponse<BureauMonitorResponse>> getMonitorData(@PathVariable Long clientId) {
+    public ResponseEntity<ApiResponse<BureauMonitorResponse>> getMonitor(@PathVariable Long clientId) {
         return ResponseEntity.ok(ApiResponse.ok(bureauMonitorService.getMonitorData(clientId)));
     }
 }

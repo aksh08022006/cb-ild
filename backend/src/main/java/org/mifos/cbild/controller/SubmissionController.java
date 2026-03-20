@@ -17,36 +17,32 @@ import java.util.List;
 @RequestMapping("/api/submissions")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Module 2 — Submission Dashboard", description = "Reporting cycles, submission status, batch management")
+@Tag(name = "Module 2 - Submission Dashboard")
 public class SubmissionController {
 
     private final SubmissionService submissionService;
 
     @GetMapping
-    @Operation(summary = "Get submission summary and recent submissions")
     @PreAuthorize("hasAnyRole('ADMIN','KYC_OFFICER','CREDIT_ANALYST','COMPLIANCE')")
     public ResponseEntity<ApiResponse<SubmissionSummaryResponse>> getSummary() {
         return ResponseEntity.ok(ApiResponse.ok(submissionService.getSummary()));
     }
 
     @GetMapping("/client/{clientId}")
-    @Operation(summary = "Get all submissions for a specific client")
     @PreAuthorize("hasAnyRole('ADMIN','KYC_OFFICER','CREDIT_ANALYST','COMPLIANCE')")
     public ResponseEntity<ApiResponse<List<SubmissionDto>>> getByClient(@PathVariable Long clientId) {
         return ResponseEntity.ok(ApiResponse.ok(submissionService.getByClientId(clientId)));
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get a single submission by ID")
     @PreAuthorize("hasAnyRole('ADMIN','KYC_OFFICER','CREDIT_ANALYST','COMPLIANCE')")
     public ResponseEntity<ApiResponse<SubmissionDto>> getById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(submissionService.getById(id)));
     }
 
     @PostMapping("/{clientId}/submit")
-    @Operation(summary = "Trigger a new bureau submission for a client")
     @PreAuthorize("hasAnyRole('ADMIN','KYC_OFFICER')")
-    public ResponseEntity<ApiResponse<SubmissionDto>> triggerSubmission(@PathVariable Long clientId) {
-        return ResponseEntity.ok(ApiResponse.ok("Submission triggered", submissionService.triggerSubmission(clientId)));
+    public ResponseEntity<ApiResponse<SubmissionDto>> trigger(@PathVariable Long clientId) {
+        return ResponseEntity.ok(ApiResponse.ok("Triggered", submissionService.triggerSubmission(clientId)));
     }
 }

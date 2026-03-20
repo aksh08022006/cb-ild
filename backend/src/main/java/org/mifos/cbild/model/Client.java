@@ -7,14 +7,18 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Entity
 @Table(name = "clients")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Client {
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "fineract_client_id", nullable = false, unique = true)
@@ -38,26 +42,15 @@ public class Client {
     @Column(name = "mobile_no")
     private String mobileNo;
 
-    @Column(name = "email")
     private String email;
 
     @Column(name = "address_line1")
     private String addressLine1;
 
-    @Column(name = "address_line2")
-    private String addressLine2;
-
-    @Column(name = "city")
     private String city;
-
-    @Column(name = "state")
-    private String state;
 
     @Column(name = "postal_code")
     private String postalCode;
-
-    @Column(name = "country")
-    private String country;
 
     @Column(name = "activation_date")
     private LocalDate activationDate;
@@ -65,15 +58,6 @@ public class Client {
     @Enumerated(EnumType.STRING)
     @Column(name = "account_status")
     private AccountStatus accountStatus;
-
-    @OneToMany(mappedBy = "client", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<KycField> kycFields;
-
-    @OneToMany(mappedBy = "client", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Submission> submissions;
-
-    @OneToMany(mappedBy = "client", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<Dispute> disputes;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

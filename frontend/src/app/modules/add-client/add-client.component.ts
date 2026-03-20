@@ -361,16 +361,37 @@ export class AddClientComponent implements OnInit {
 
   private computeKycScore() {
     const controls = this.form.controls;
-    const requiredFields = ['firstName', 'lastName', 'dateOfBirth', 'nationalId', 
-                           'addressLine1', 'city', 'state', 'postalCode'];
     
-    let filled = 0;
-    for (const field of requiredFields) {
+    // CDC (Círculo de Crédito) Mexico Format - Mandatory Fields
+    // Score calculation: MANDATORY fields × 15 points each
+    const mandatoryFields = ['firstName', 'lastName', 'dateOfBirth', 'nationalId', 
+                             'addressLine1', 'city', 'state', 'postalCode'];
+    
+    // OPTIONAL fields enhance the score
+    const optionalFields = ['mobileNo', 'email', 'gender'];
+    
+    // Count filled mandatory fields (max 105 points)
+    let mandatoryPoints = 0;
+    for (const field of mandatoryFields) {
       const val = controls[field].value;
-      if (val && val.toString().trim() !== '') filled++;
+      if (val && val.toString().trim() !== '') {
+        mandatoryPoints += 15;
+      }
     }
     
-    this.kycCompleteness = Math.round((filled / requiredFields.length) * 100);
+    // Count filled optional fields (max 25 points)
+    let optionalPoints = 0;
+    for (const field of optionalFields) {
+      const val = controls[field].value;
+      if (val && val.toString().trim() !== '') {
+        optionalPoints += 5;
+      }
+    }
+    
+    // Calculate final score: (points / 130) × 100, capped at 100%
+    const maxPoints = 130; // (8 mandatory × 15) + (5 optional × 5)
+    const totalPoints = mandatoryPoints + optionalPoints;
+    this.kycCompleteness = Math.min(Math.round((totalPoints / maxPoints) * 100), 100);
     
     // Validate after slight delay to avoid ExpressionChangedAfterCheckError
     setTimeout(() => {
@@ -433,14 +454,16 @@ export class AddClientComponent implements OnInit {
   }
 
   getScoreLevel(): string {
-    if (this.kycCompleteness >= 85) return 'HIGH';
-    if (this.kycCompleteness >= 60) return 'MEDIUM';
+    // CDC Format: HIGH = all 7 mandatory fields (105/130 = 81%), MEDIUM = 5+ mandatory
+    if (this.kycCompleteness >= 81) return 'HIGH';
+    if (this.kycCompleteness >= 58) return 'MEDIUM';
     return 'LOW';
   }
 
   getScoreLabel(): string {
-    if (this.kycCompleteness >= 85) return 'Ready to submit';
-    if (this.kycCompleteness >= 60) return 'Partial review needed';
-    return 'Fix required before submission';
+    // CDC Círculo de Crédito readiness labels
+    if (this.kycCompleteness >= 81) return 'Ready for Círculo de Crédito submission';
+    if (this.kycCompleteness >= 58) return 'Incomplete CDC submission - some mandatory fields missing';
+    return 'Cannot submit to bureau - critical CDC fields missing';
   }
 }

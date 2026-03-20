@@ -3,7 +3,6 @@ package org.mifos.cbild.config;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -48,13 +47,15 @@ public class JwtService {
     }
 
     private Claims getClaims(String token) {
-        return Jwts.parser().setSigningKey(getKey()).build()
-            .parseClaimsJws(token).getBody();
+        return Jwts.parserBuilder()
+            .setSigningKey(getKey())
+            .build()
+            .parseClaimsJws(token)
+            .getBody();
     }
 
     private Key getKey() {
-        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(
-            java.util.Base64.getEncoder().encodeToString(secret.getBytes())
-        ));
+        byte[] keyBytes = java.util.Base64.getEncoder().encode(secret.getBytes());
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 }

@@ -15,22 +15,22 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/kyc")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Module 1 — KYC Completeness", description = "KYC scoring, field status, Metro 2 preview")
+@Tag(name = "Module 1 - KYC Completeness")
 public class KycController {
 
     private final KycScoringService kycScoringService;
 
     @GetMapping("/{clientId}/score")
-    @Operation(summary = "Get KYC completeness score for a client")
+    @Operation(summary = "KYC completeness score for a client")
     @PreAuthorize("hasAnyRole('ADMIN','KYC_OFFICER','CREDIT_ANALYST','COMPLIANCE')")
     public ResponseEntity<ApiResponse<KycScoreResponse>> getScore(@PathVariable Long clientId) {
         return ResponseEntity.ok(ApiResponse.ok(kycScoringService.computeScore(clientId)));
     }
 
     @GetMapping("/{clientId}/metro2-preview")
-    @Operation(summary = "Preview Metro 2 field mapping for a client")
+    @Operation(summary = "Metro 2 field mapping preview")
     @PreAuthorize("hasAnyRole('ADMIN','KYC_OFFICER','CREDIT_ANALYST','COMPLIANCE')")
-    public ResponseEntity<ApiResponse<Metro2PreviewResponse>> getMetro2Preview(@PathVariable Long clientId) {
+    public ResponseEntity<ApiResponse<Metro2PreviewResponse>> getMetro2(@PathVariable Long clientId) {
         return ResponseEntity.ok(ApiResponse.ok(kycScoringService.buildMetro2Preview(clientId)));
     }
 }

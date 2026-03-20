@@ -14,13 +14,13 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/insights")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Module 4 — Data Usage Insights", description = "Inquiry logs, monitoring alerts, credit profile")
+@Tag(name = "Module 4 - Data Insights")
 public class InsightsController {
 
     private final InsightsService insightsService;
 
     @GetMapping("/{clientId}")
-    @Operation(summary = "Get full insights — inquiries and alerts for a client")
+    @Operation(summary = "Inquiry log and monitoring alerts for a client")
     @PreAuthorize("hasAnyRole('ADMIN','CREDIT_ANALYST','COMPLIANCE')")
     public ResponseEntity<ApiResponse<InsightsResponse>> getInsights(@PathVariable Long clientId) {
         return ResponseEntity.ok(ApiResponse.ok(insightsService.getInsights(clientId)));

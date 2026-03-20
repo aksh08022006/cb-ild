@@ -1,19 +1,40 @@
 package org.mifos.cbild.service;
 
+import lombok.RequiredArgsConstructor;
 import org.mifos.cbild.dto.ClientSummaryDto;
-import org.mifos.cbild.dto.ClientDetailDto;
-import org.mifos.cbild.dto.CreateClientRequest;
-import org.mifos.cbild.dto.ValidationWarning;
+import org.mifos.cbild.model.Client;
+import org.mifos.cbild.repository.ClientRepository;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
-public interface ClientService {
-    List<ClientSummaryDto> getAllClients();
-    ClientSummaryDto getById(Long id);
-    ClientDetailDto getDetailedClient(Long id);
-    ClientDetailDto createClient(CreateClientRequest request);
-    ClientDetailDto updateClient(Long id, CreateClientRequest request);
-    void deleteClient(Long id);
-    List<ClientSummaryDto> searchClients(String query);
-    List<ValidationWarning> validateClientData(CreateClientRequest request);
+@Service
+@RequiredArgsConstructor
+public class ClientService {
+
+    private final ClientRepository clientRepository;
+
+    public List<ClientSummaryDto> getAllClients() {
+        return clientRepository.findAll().stream()
+            .map(this::toSummary)
+            .collect(Collectors.toList());
+    }
+
+    public ClientSummaryDto getById(Long id) {
+        return clientRepository.findById(id)
+            .map(this::toSummary)
+            .orElseThrow(() -> new RuntimeException("Client not found: " + id));
+    }
+
+    private ClientSummaryDto toSummary(Client c) {
+        return ClientSummaryDto.builder()
+            .id(c.getId())
+            .fineractClientId(c.getFineractClientId())
+            .fullName(c.getFirstName() + " " + c.getLastName())
+            .city(c.getCity())
+            .accountStatus(c.getAccountStatus() != null ? c.getAccountStatus().name() : null)
+            .activationDate(c.getActivationDate())
+            .build();
+    }
 }

@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-@Tag(name = "Authentication", description = "JWT login")
+@Tag(name = "Authentication")
 public class AuthController {
 
     private final AuthService authService;
@@ -23,5 +23,10 @@ public class AuthController {
     @Operation(summary = "Login and receive JWT token")
     public ResponseEntity<ApiResponse<LoginResponse>> login(@RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(authService.login(request)));
+    }
+
+    @GetMapping("/health")
+    public ResponseEntity<String> health() {
+        return ResponseEntity.ok("OK");
     }
 }

@@ -1,5 +1,11 @@
 package org.mifos.cbild.config;
 
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -7,20 +13,20 @@ import org.springframework.context.annotation.Configuration;
 public class OpenApiConfig {
 
     @Bean
-    public io.swagger.v3.oas.models.OpenAPI openAPI() {
-        return new io.swagger.v3.oas.models.OpenAPI()
-            .info(new io.swagger.v3.oas.models.info.Info()
+    public OpenAPI openAPI() {
+        return new OpenAPI()
+            .info(new Info()
                 .title("Mifos CB-ILD API")
                 .description("Credit Bureau Information Lifecycle Dashboard — GSoC 2026")
                 .version("1.0.0")
-                .contact(new io.swagger.v3.oas.models.info.Contact()
-                    .name("aksh08022006")
+                .contact(new Contact().name("aksh08022006")
                     .url("https://github.com/aksh08022006")))
-            .addSecurityItem(new io.swagger.v3.oas.models.security.SecurityRequirement().addList("bearerAuth"))
-            .components(new io.swagger.v3.oas.models.Components()
+            .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
+            .components(new Components()
                 .addSecuritySchemes("bearerAuth",
-                    new io.swagger.v3.oas.models.security.SecurityScheme()
-                        .type(io.swagger.v3.oas.models.security.SecurityScheme.Type.HTTP)
-                        .scheme("bearer").bearerFormat("JWT")));
+                    new SecurityScheme()
+                        .type(SecurityScheme.Type.HTTP)
+                        .scheme("bearer")
+                        .bearerFormat("JWT")));
     }
 }
