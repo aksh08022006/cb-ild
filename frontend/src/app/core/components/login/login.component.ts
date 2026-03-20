@@ -462,6 +462,15 @@ export class LoginComponent {
   loading = false;
   error = '';
   router = inject(Router);
+  http = inject(HttpClient);
+
+  constructor() {
+    // Auto-login for GSOC demo - bypass authentication
+    localStorage.setItem('auth_token', 'demo_token_gsoc');
+    localStorage.setItem('user_role', 'ADMIN');
+    localStorage.setItem('username', 'admin');
+    this.router.navigate(['/dashboard']);
+  }
 
   login() {
     if (!this.username || !this.password) {
@@ -472,10 +481,9 @@ export class LoginComponent {
     this.loading = true;
     this.error = '';
 
-    const http = inject(HttpClient);
     const loginPayload = { username: this.username, password: this.password };
     
-    http.post<any>(`${environment.apiUrl}/auth/login`, loginPayload)
+    this.http.post<any>(`${environment.apiUrl}/auth/login`, loginPayload)
       .subscribe({
         next: (response) => {
           localStorage.setItem('auth_token', response.data.token);
