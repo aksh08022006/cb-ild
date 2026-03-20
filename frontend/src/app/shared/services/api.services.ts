@@ -20,6 +20,14 @@ export class ApiService {
   post<T>(path: string, body: any): Observable<T> {
     return this.http.post<ApiResponse<T>>(`${BASE}${path}`, body).pipe(map(r => r.data));
   }
+
+  put<T>(path: string, body: any): Observable<T> {
+    return this.http.put<ApiResponse<T>>(`${BASE}${path}`, body).pipe(map(r => r.data));
+  }
+
+  delete<T>(path: string): Observable<T> {
+    return this.http.delete<ApiResponse<T>>(`${BASE}${path}`).pipe(map(r => r.data));
+  }
 }
 
 // ─── KYC Service ─────────────────────────────────────────────────────────────
@@ -205,13 +213,11 @@ export class ClientApiService {
   }
 
   update(id: number, request: CreateClientRequest): Observable<ClientDetailDto> {
-    return this.http.put<ApiResponse<ClientDetailDto>>(`${BASE}/clients/${id}`, request)
-      .pipe(map(r => r.data));
+    return this.api.put<ClientDetailDto>(`/clients/${id}`, request);
   }
 
   delete(id: number): Observable<string> {
-    return this.http.delete<ApiResponse<string>>(`${BASE}/clients/${id}`)
-      .pipe(map(r => r.data));
+    return this.api.delete<string>(`/clients/${id}`);
   }
 
   search(query: string): Observable<ClientSummaryDto[]> {
@@ -219,9 +225,6 @@ export class ClientApiService {
   }
 
   validate(id: number, request: CreateClientRequest): Observable<ValidationWarning[]> {
-    return this.http.post<ApiResponse<ValidationWarning[]>>(`${BASE}/clients/${id}/validate`, request)
-      .pipe(map(r => r.data));
+    return this.api.post<ValidationWarning[]>(`/clients/${id}/validate`, request);
   }
-
-  private http = inject(HttpClient);
 }

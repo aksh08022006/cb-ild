@@ -407,7 +407,9 @@ export class AddClientComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        alert('Error: ' + (err.error?.message || 'Operation failed'));
+        console.error('Error details:', err);
+        const message = err.error?.message || err.message || 'Operation failed. Please check console for details.';
+        alert('Error: ' + message);
       }
     });
   }
