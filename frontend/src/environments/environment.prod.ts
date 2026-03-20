@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://cbild-backend.railway.app/api'
+  apiUrl: 'https://cb-ild-backend.onrender.com/api'
 };

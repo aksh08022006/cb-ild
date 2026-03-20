@@ -10,7 +10,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule } from '@angular/material/tabs';
-import { AuthService } from '../../interceptors/auth.interceptor';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../../../environments/environment';
 
 @Component({
   selector: 'app-login',
@@ -471,19 +472,22 @@ export class LoginComponent {
     this.loading = true;
     this.error = '';
 
-    // Simulate API call
-    setTimeout(() => {
-      if ((this.username === 'admin' && this.password === 'admin123') ||
-          (this.username === 'kyc_officer' && this.password === 'kyc123') ||
-          (this.username === 'analyst' && this.password === 'analyst123') ||
-          (this.username === 'compliance' && this.password === 'comply123')) {
-        localStorage.setItem('auth_token', 'mock_jwt_token_' + Date.now());
-        localStorage.setItem('user_role', this.username);
-        this.router.navigate(['/dashboard']);
-      } else {
-        this.error = 'Invalid credentials. Please try again.';
-      }
-      this.loading = false;
-    }, 500);
+    const http = inject(HttpClient);
+    const loginPayload = { username: this.username, password: this.password };
+    
+    http.post<any>(`${environment.apiUrl}/auth/login`, loginPayload)
+      .subscribe({
+        next: (response) => {
+          localStorage.setItem('auth_token', response.data.token);
+          localStorage.setItem('user_role', response.data.role);
+          localStorage.setItem('username', response.data.username);
+          this.router.navigate(['/dashboard']);
+          this.loading = false;
+        },
+        error: (error) => {
+          this.error = error.error?.message || 'Invalid credentials. Please try again.';
+          this.loading = false;
+        }
+      });
   }
 }
