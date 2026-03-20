@@ -487,25 +487,3 @@ export class LoginComponent {
     }, 500);
   }
 }
-    .login-logo p  { color:#666; font-size:0.85rem; margin:0; }
-    .full-width  { width:100%; }
-    .login-btn   { height:48px; font-size:1rem; margin-top:0.5rem; }
-    .error-msg   { color:#c62828; font-size:0.85rem; margin-bottom:0.5rem; }
-    .demo-creds  { text-align:center; margin-top:1rem; color:#999; }
-  `]
-})
-export class LoginComponent {
-  private auth   = inject(AuthService);
-  private router = inject(Router);
-  username = ''; password = ''; showPass = false;
-  loading = false; error = '';
-
-  login(): void {
-    if (!this.username || !this.password) { this.error = 'Enter username and password'; return; }
-    this.loading = true; this.error = '';
-    this.auth.login(this.username, this.password).subscribe({
-      next: () => { this.loading = false; this.router.navigate(['/dashboard']); },
-      error: () => { this.loading = false; this.error = 'Invalid credentials'; }
-    });
-  }
-}

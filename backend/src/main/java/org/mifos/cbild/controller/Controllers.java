@@ -17,7 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 @Tag(name = "Module 1 — KYC Completeness", description = "KYC scoring, field status, Metro 2 preview")
-public class KycController {
+class KycController {
 
     private final KycScoringService kycScoringService;
 

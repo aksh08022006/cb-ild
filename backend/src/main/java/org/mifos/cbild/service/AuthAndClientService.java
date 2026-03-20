@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
 // ─── Auth Service ─────────────────────────────────────────────────────────────
 @Service
 @RequiredArgsConstructor
-public class AuthService {
+class AuthService {
 
     private final AuthenticationManager authManager;
     private final UserRepository userRepository;
@@ -40,7 +40,7 @@ public class AuthService {
 // ─── Client Service ───────────────────────────────────────────────────────────
 @Service
 @RequiredArgsConstructor
-public class ClientService {
+class ClientService {
 
     private final ClientRepository clientRepository;
 

@@ -1,0 +1,53 @@
+<mat-sidenav-container class="app-container">
+  <mat-sidenav mode="side" opened class="sidenav">
+    <div class="sidenav-header">
+      <h1 class="logo-text">CB-ILD</h1>
+      <small>Credit Bureau</small>
+    </div>
+    <mat-nav-list>
+      <a mat-list-item routerLink="/dashboard" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>dashboard</mat-icon>
+        <span matListItemTitle>Dashboard</span>
+      </a>
+      <a mat-list-item routerLink="/dashboard/kyc" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>assignment</mat-icon>
+        <span matListItemTitle>KYC Completeness</span>
+      </a>
+      <a mat-list-item routerLink="/dashboard/submissions" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>done_all</mat-icon>
+        <span matListItemTitle>Submissions</span>
+      </a>
+      <a mat-list-item routerLink="/dashboard/bureau" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>monitor</mat-icon>
+        <span matListItemTitle>Bureau Monitor</span>
+      </a>
+      <a mat-list-item routerLink="/dashboard/insights" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>analytics</mat-icon>
+        <span matListItemTitle>Data Insights</span>
+      </a>
+      <a mat-list-item routerLink="/dashboard/disputes" routerLinkActive="active-link">
+        <mat-icon matListItemIcon>gavel</mat-icon>
+        <span matListItemTitle>Disputes</span>
+      </a>
+    </mat-nav-list>
+    <mat-divider></mat-divider>
+    <div class="sidenav-footer">
+      <strong>{{user}}</strong>
+      <small class="role-badge">{{role | uppercase}}</small>
+      <button mat-icon-button matTooltip="API Docs" (click)="openDocs()" style="margin-top:0.5rem;">
+        <mat-icon>description</mat-icon>
+      </button>
+    </div>
+  </mat-sidenav>
+  <mat-sidenav-content>
+    <mat-toolbar class="toolbar">
+      <span class="spacer"></span>
+      <button mat-icon-button matTooltip="Logout" (click)="logout()">
+        <mat-icon>logout</mat-icon>
+      </button>
+    </mat-toolbar>
+    <div class="content-area">
+      <router-outlet></router-outlet>
+    </div>
+  </mat-sidenav-content>
+</mat-sidenav-container>

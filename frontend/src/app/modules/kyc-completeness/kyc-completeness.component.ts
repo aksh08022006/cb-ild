@@ -23,9 +23,9 @@ import { KycService, KycScoreResponse, Metro2PreviewResponse } from '../../share
       <div>
         <h2>
           <mat-icon class="header-icon">verified_user</mat-icon>
-          KYC Completeness &amp; Bureau Readiness
+          KYC Completeness & Bureau Readiness
         </h2>
-        <p>Module 1 — Data Creation &amp; Acquisition Dashboard</p>
+        <p>Module 1 — Data Creation & Acquisition Dashboard</p>
       </div>
       <a mat-stroked-button routerLink="/dashboard/clients">
         <mat-icon>arrow_back</mat-icon> All Clients

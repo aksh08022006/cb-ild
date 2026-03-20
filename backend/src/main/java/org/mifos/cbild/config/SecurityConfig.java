@@ -37,7 +37,7 @@ import java.util.Date;
 
 // ─── JWT Service ─────────────────────────────────────────────────────────────
 @Service
-public class JwtService {
+class JwtService {
 
     @Value("${jwt.secret}")
     private String secret;

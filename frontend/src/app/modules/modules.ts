@@ -14,10 +14,9 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatStepperModule } from '@angular/material/stepper';
-import { MatTimelineModule } from '@angular/material/stepper';
 import { BureauMonitorService, BureauMonitorResponse,
          InsightsService, InsightsResponse,
-         DisputeService, DisputeDto } from '../../shared/services/api.services';
+         DisputeService, DisputeDto } from '../shared/services/api.services';
 
 // ─── Module 3: Bureau Monitor ────────────────────────────────────────────────
 @Component({
@@ -29,7 +28,7 @@ import { BureauMonitorService, BureauMonitorResponse,
     <div class="page-header">
       <div>
         <h2><mat-icon class="header-icon">monitor</mat-icon> Bureau Processing Monitor</h2>
-        <p>Module 3 — Bureau Processing &amp; Data Management</p>
+        <p>Module 3 — Bureau Processing & Data Management</p>
       </div>
       <a mat-stroked-button routerLink="/dashboard/clients"><mat-icon>arrow_back</mat-icon> Back</a>
     </div>
@@ -106,7 +105,7 @@ import { BureauMonitorService, BureauMonitorResponse,
       <!-- Retention indicator -->
       <mat-card class="retention-card">
         <mat-card-header>
-          <mat-card-title>Data Retention &amp; Status Timeline</mat-card-title>
+          <mat-card-title>Data Retention & Status Timeline</mat-card-title>
         </mat-card-header>
         <mat-card-content>
           <div class="retention-bar">
@@ -183,8 +182,8 @@ export class BureauMonitorComponent implements OnInit {
   template: `
     <div class="page-header">
       <div>
-        <h2><mat-icon class="header-icon">insights</mat-icon> Data Usage &amp; Insights</h2>
-        <p>Module 4 — Bureau Data Consumption &amp; Monitoring Alerts</p>
+        <h2><mat-icon class="header-icon">insights</mat-icon> Data Usage & Insights</h2>
+        <p>Module 4 — Bureau Data Consumption & Monitoring Alerts</p>
       </div>
       <a mat-stroked-button routerLink="/dashboard/clients"><mat-icon>arrow_back</mat-icon> Back</a>
     </div>
@@ -325,7 +324,7 @@ export class DataInsightsComponent implements OnInit {
     <div class="page-header">
       <div>
         <h2><mat-icon class="header-icon">gavel</mat-icon> Dispute Resolution</h2>
-        <p>Module 5 — Dispute Case Manager &amp; Audit Trail</p>
+        <p>Module 5 — Dispute Case Manager & Audit Trail</p>
       </div>
     </div>
 

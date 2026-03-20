@@ -1,0 +1,85 @@
+.app-container {
+  height: 100vh;
+}
+
+.sidenav {
+  width: 220px;
+  background: #1565C0;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidenav-header {
+  padding: 1.5rem 1rem 1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+
+.logo-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  display: block;
+  margin: 0;
+}
+
+.sidenav-header small {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  display: block;
+  margin-top: 0.25rem;
+}
+
+mat-nav-list a {
+  color: rgba(255,255,255,0.85) !important;
+}
+
+.active-link {
+  background: rgba(255,255,255,0.15) !important;
+  color: #fff !important;
+}
+
+.sidenav-footer {
+  margin-top: auto;
+  padding: 1rem;
+  border-top: 1px solid rgba(255,255,255,0.2);
+  font-size: 0.8rem;
+}
+
+.sidenav-footer strong {
+  display: block;
+  margin: 2px 0;
+}
+
+.role-badge {
+  background: rgba(255,255,255,0.2);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.toolbar-title {
+  font-size: 1rem;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.main-content {
+  background: #F5F5F5;
+}
+
+.content-area {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
