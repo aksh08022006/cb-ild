@@ -14,9 +14,9 @@ export class LoginComponent implements OnInit {
 
   ngOnInit() {
     // Auto-login for GSOC demo - bypass authentication
-    localStorage.setItem('auth_token', 'demo_token_gsoc');
-    localStorage.setItem('user_role', 'ADMIN');
-    localStorage.setItem('username', 'admin');
+    localStorage.setItem('cbild_token', 'demo_token_gsoc');
+    localStorage.setItem('cbild_role', 'ADMIN');
+    localStorage.setItem('cbild_user', 'admin');
     this.router.navigate(['/dashboard']);
   }
 }
