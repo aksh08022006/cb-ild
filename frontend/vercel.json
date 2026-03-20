@@ -1,0 +1,15 @@
+{
+  "buildCommand": "npm run build -- --configuration production",
+  "outputDirectory": "dist/cb-ild-frontend/browser",
+  "installCommand": "npm install",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://cb-ild-backend.onrender.com/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
