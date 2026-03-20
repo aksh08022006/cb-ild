@@ -136,7 +136,7 @@ import { SubmissionService, SubmissionSummaryResponse, SubmissionDto } from '../
             <mat-expansion-panel *ngFor="let s of rejectedSubmissions">
               <mat-expansion-panel-header>
                 <mat-panel-title>{{s.batchReference}}</mat-panel-title>
-                <mat-panel-description>{{s.feedbacks?.length || 0}} error(s)</mat-panel-description>
+                <mat-panel-description>{{s.feedbacks.length || 0}} error(s)</mat-panel-description>
               </mat-expansion-panel-header>
               <div *ngFor="let f of s.feedbacks" class="feedback-item"
                    [class]="'feedback-'+f.severity.toLowerCase()">
