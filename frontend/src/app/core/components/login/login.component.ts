@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -455,7 +455,7 @@ import { environment } from '../../../../environments/environment';
     }
   `]
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   username = '';
   password = '';
   showPass = false;
@@ -464,7 +464,7 @@ export class LoginComponent {
   router = inject(Router);
   http = inject(HttpClient);
 
-  constructor() {
+  ngOnInit() {
     // Auto-login for GSOC demo - bypass authentication
     localStorage.setItem('auth_token', 'demo_token_gsoc');
     localStorage.setItem('user_role', 'ADMIN');
