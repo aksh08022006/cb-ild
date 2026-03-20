@@ -18,7 +18,6 @@ import { BureauMonitorService, BureauMonitorResponse,
          InsightsService, InsightsResponse,
          DisputeService, DisputeDto } from '../shared/services/api.services';
 
-// ─── Module 3: Bureau Monitor ────────────────────────────────────────────────
 @Component({
   selector: 'app-bureau-monitor',
   standalone: true,
@@ -28,7 +27,7 @@ import { BureauMonitorService, BureauMonitorResponse,
     <div class="page-header">
       <div>
         <h2><mat-icon class="header-icon">monitor</mat-icon> Bureau Processing Monitor</h2>
-        <p>Module 3 — Bureau Processing & Data Management</p>
+        <p>Module 3 — Bureau Processing and Data Management</p>
       </div>
       <a mat-stroked-button routerLink="/dashboard/clients"><mat-icon>arrow_back</mat-icon> Back</a>
     </div>
@@ -102,10 +101,9 @@ import { BureauMonitorService, BureauMonitorResponse,
         </mat-card>
       </div>
 
-      <!-- Retention indicator -->
       <mat-card class="retention-card">
         <mat-card-header>
-          <mat-card-title>Data Retention & Status Timeline</mat-card-title>
+          <mat-card-title>Data Retention and Status Timeline</mat-card-title>
         </mat-card-header>
         <mat-card-content>
           <div class="retention-bar">
@@ -173,7 +171,6 @@ export class BureauMonitorComponent implements OnInit {
   getRetentionPct() { return this.data ? Math.min(100, (2 / (this.data.retentionYears || 7)) * 100) : 0; }
 }
 
-// ─── Module 4: Data Insights ─────────────────────────────────────────────────
 @Component({
   selector: 'app-data-insights',
   standalone: true,
@@ -182,8 +179,8 @@ export class BureauMonitorComponent implements OnInit {
   template: `
     <div class="page-header">
       <div>
-        <h2><mat-icon class="header-icon">insights</mat-icon> Data Usage & Insights</h2>
-        <p>Module 4 — Bureau Data Consumption & Monitoring Alerts</p>
+        <h2><mat-icon class="header-icon">insights</mat-icon> Data Usage and Insights</h2>
+        <p>Module 4 — Bureau Data Consumption and Monitoring Alerts</p>
       </div>
       <a mat-stroked-button routerLink="/dashboard/clients"><mat-icon>arrow_back</mat-icon> Back</a>
     </div>
@@ -313,7 +310,6 @@ export class DataInsightsComponent implements OnInit {
   }
 }
 
-// ─── Module 5: Dispute Resolution ────────────────────────────────────────────
 @Component({
   selector: 'app-dispute-resolution',
   standalone: true,
@@ -324,14 +320,13 @@ export class DataInsightsComponent implements OnInit {
     <div class="page-header">
       <div>
         <h2><mat-icon class="header-icon">gavel</mat-icon> Dispute Resolution</h2>
-        <p>Module 5 — Dispute Case Manager & Audit Trail</p>
+        <p>Module 5 — Dispute Case Manager and Audit Trail</p>
       </div>
     </div>
 
     <mat-progress-bar *ngIf="loading" mode="indeterminate"></mat-progress-bar>
 
     <div class="disputes-layout" *ngIf="!loading">
-      <!-- Dispute list -->
       <mat-card class="disputes-list-card">
         <mat-card-header>
           <mat-card-title>All Disputes</mat-card-title>
@@ -351,15 +346,13 @@ export class DataInsightsComponent implements OnInit {
         </mat-card-content>
       </mat-card>
 
-      <!-- Dispute detail -->
       <div *ngIf="selectedDispute" class="dispute-detail">
         <mat-card>
           <mat-card-header>
             <mat-card-title>{{selectedDispute.caseReference}}</mat-card-title>
-            <mat-card-subtitle>{{selectedDispute.clientName}} · {{selectedDispute.disputeType.replace('_',' ')}}</mat-card-subtitle>
+            <mat-card-subtitle>{{selectedDispute.clientName}}</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
-            <!-- Side-by-side comparison -->
             <div class="comparison-grid">
               <div class="comp-side institution">
                 <div class="comp-label">Institution Record</div>
@@ -376,12 +369,8 @@ export class DataInsightsComponent implements OnInit {
                 <div class="comp-value">{{selectedDispute.bureauValue}}</div>
               </div>
             </div>
-
             <mat-divider></mat-divider>
-
             <p class="dispute-desc">{{selectedDispute.description}}</p>
-
-            <!-- Resolve form -->
             <div class="resolve-form" *ngIf="selectedDispute.status!=='RESOLVED'">
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>Resolution Notes</mat-label>
@@ -402,7 +391,6 @@ export class DataInsightsComponent implements OnInit {
           </mat-card-content>
         </mat-card>
 
-        <!-- Audit trail -->
         <mat-card class="audit-card">
           <mat-card-header>
             <mat-card-title>Audit Trail</mat-card-title>
@@ -413,9 +401,7 @@ export class DataInsightsComponent implements OnInit {
               <div class="audit-dot"></div>
               <div class="audit-body">
                 <div class="audit-action">{{a.action}}</div>
-                <div class="audit-change" *ngIf="a.oldStatus">
-                  {{a.oldStatus}} → {{a.newStatus}}
-                </div>
+                <div class="audit-change" *ngIf="a.oldStatus">{{a.oldStatus}} to {{a.newStatus}}</div>
                 <div class="audit-notes">{{a.notes}}</div>
                 <small>{{a.performedBy}} · {{a.performedAt | date:'yyyy-MM-dd HH:mm'}}</small>
               </div>
@@ -443,8 +429,7 @@ export class DataInsightsComponent implements OnInit {
     .disp-ref    { font-size:12px; font-weight:600; color:#1565C0; }
     .disp-client { font-size:13px; font-weight:500; }
     .disp-type   { font-size:11px; color:#888; margin-bottom:4px; }
-    .comparison-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:1rem;
-                       align-items:center; margin:1rem 0; }
+    .comparison-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:1rem; align-items:center; margin:1rem 0; }
     .comp-side { padding:12px; border-radius:8px; text-align:center; }
     .institution { background:#E8F5E9; }
     .bureau      { background:#FFEBEE; }
@@ -453,20 +438,17 @@ export class DataInsightsComponent implements OnInit {
     .comp-value  { font-size:1rem; font-weight:600; margin-top:4px; }
     .comp-vs     { display:flex; flex-direction:column; align-items:center; color:#888; }
     .dispute-desc { font-size:13px; color:#555; margin:1rem 0; }
-    .resolve-form { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start;
-                    background:#F5F5F5; padding:1rem; border-radius:8px; margin-top:1rem; }
+    .resolve-form { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; background:#F5F5F5; padding:1rem; border-radius:8px; margin-top:1rem; }
     .full-width  { width:100%; }
     .audit-card  { margin-top:1rem; }
     .audit-item  { display:flex; gap:12px; padding:8px 0; position:relative; }
-    .audit-dot   { width:12px; height:12px; border-radius:50%; background:#1565C0;
-                   flex-shrink:0; margin-top:4px; }
+    .audit-dot   { width:12px; height:12px; border-radius:50%; background:#1565C0; flex-shrink:0; margin-top:4px; }
     .audit-line  { position:absolute; left:5px; top:20px; bottom:-8px; width:2px; background:#E0E0E0; }
-    .audit-action{ font-weight:500; font-size:13px; }
-    .audit-change{ font-size:12px; color:#555; }
-    .audit-notes { font-size:12px; color:#777; }
+    .audit-action { font-weight:500; font-size:13px; }
+    .audit-change { font-size:12px; color:#555; }
+    .audit-notes  { font-size:12px; color:#777; }
     .audit-item small { color:#aaa; font-size:11px; }
-    .no-selection { display:flex; flex-direction:column; align-items:center; justify-content:center;
-                    color:#BDBDBD; padding:3rem; }
+    .no-selection { display:flex; flex-direction:column; align-items:center; justify-content:center; color:#BDBDBD; padding:3rem; }
     .no-selection mat-icon { font-size:3rem; height:3rem; width:3rem; }
   `]
 })

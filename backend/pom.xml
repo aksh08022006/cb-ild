@@ -14,7 +14,6 @@
   <groupId>org.mifos</groupId>
   <artifactId>cb-ild</artifactId>
   <version>1.0.0-SNAPSHOT</version>
-  <name>Mifos Credit Bureau Information Lifecycle Dashboard</name>
   <description>GSoC 2026 - Credit Bureau Lifecycle UI module for Mifos WebApp</description>
 
   <properties>
@@ -26,7 +25,6 @@
   </properties>
 
   <dependencies>
-    <!-- Spring Boot Core -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
@@ -43,21 +41,15 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
-
-    <!-- MySQL -->
     <dependency>
       <groupId>com.mysql</groupId>
       <artifactId>mysql-connector-j</artifactId>
       <scope>runtime</scope>
     </dependency>
-
-    <!-- Flyway DB Migrations -->
     <dependency>
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-mysql</artifactId>
     </dependency>
-
-    <!-- JWT -->
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-api</artifactId>
@@ -75,30 +67,22 @@
       <version>${jjwt.version}</version>
       <scope>runtime</scope>
     </dependency>
-
-    <!-- OpenAPI / Swagger -->
     <dependency>
       <groupId>org.springdoc</groupId>
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
       <version>${springdoc.version}</version>
     </dependency>
-
-    <!-- MapStruct -->
     <dependency>
       <groupId>org.mapstruct</groupId>
       <artifactId>mapstruct</artifactId>
       <version>${mapstruct.version}</version>
     </dependency>
-
-    <!-- Lombok -->
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
       <version>${lombok.version}</version>
       <optional>true</optional>
     </dependency>
-
-    <!-- Test -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
