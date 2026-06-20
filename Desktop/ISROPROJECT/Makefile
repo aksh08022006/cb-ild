@@ -1,7 +1,7 @@
-.PHONY: help setup auth demo check-ingest ingest preprocess database train aqi hcho transport dashboard test lint clean
+.PHONY: help setup auth demo check-ingest real fetch-web ingest preprocess database train aqi hcho transport dashboard test lint clean
 
 CONFIG ?= config/config.yaml
-PY     := python
+PY     := python3
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -21,6 +21,12 @@ demo-fast:    ## Quick smoke run of the full pipeline
 
 check-ingest: ## Show which ingestion deps / credentials / inputs are ready
 	$(PY) pipelines/check_ingest.py
+
+fetch-web:    ## Pull REAL TROPOMI/MODIS/ERA5 observation layers into the web app (no CPCB needed)
+	$(PY) pipelines/fetch_real_web.py
+
+real:         ## ONE-COMMAND real run: fetch GEE predictors + (with CPCB in data/external) train+validate -> real AQI
+	$(PY) pipelines/run_real.py
 
 ingest:       ## Phase 2: download all datasets (GEE + INSAT/MOSDAC + CPCB)
 	$(PY) pipelines/01_ingest.py --config $(CONFIG)
