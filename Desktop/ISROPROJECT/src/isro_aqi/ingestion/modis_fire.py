@@ -37,11 +37,13 @@ def active_fire_frp(cfg: Config, start: str, end: str) -> "ee.Image":
         .filterBounds(region)
     )
     frp = coll.map(lambda i: i.divide(10.0))  # scale to MW
+    # .toFloat(): count() is UInt32 while the FRP bands are Float32, and GEE's
+    # image export requires all bands to share a data type -- cast to one.
     return ee.Image.cat(
         frp.mean().rename("frp_mean"),
         frp.max().rename("frp_max"),
         coll.count().rename("fire_count"),
-    )
+    ).toFloat()
 
 
 def burned_area(cfg: Config, start: str, end: str) -> "ee.Image":
