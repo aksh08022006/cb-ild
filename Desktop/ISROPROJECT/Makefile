@@ -1,0 +1,54 @@
+.PHONY: help setup auth demo ingest preprocess database train aqi hcho transport dashboard test lint clean
+
+CONFIG ?= config/config.yaml
+PY     := python
+
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	 awk 'BEGIN {FS=":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+
+setup:        ## Install the package in editable mode
+	pip install -e .
+
+auth:         ## Authenticate Google Earth Engine (one-time)
+	earthengine authenticate
+
+demo:         ## Run the FULL pipeline end-to-end on synthetic data (no credentials)
+	$(PY) pipelines/run_demo.py
+
+demo-fast:    ## Quick smoke run of the full pipeline
+	$(PY) pipelines/run_demo.py --fast
+
+ingest:       ## Phase 2: download all datasets (GEE + INSAT/MOSDAC + CPCB)
+	$(PY) pipelines/01_ingest.py --config $(CONFIG)
+
+preprocess:   ## Phase 4: regrid, QA-filter, temporally aggregate, collocate
+	$(PY) pipelines/02_preprocess.py --config $(CONFIG)
+
+database:     ## Phase 3: assemble the unified India-wide training table
+	$(PY) pipelines/03_build_database.py --config $(CONFIG)
+
+train:        ## Phases 6-7: train CNN-LSTM (+ RF/XGB baselines)
+	$(PY) pipelines/04_train.py --config $(CONFIG)
+
+aqi:          ## Phases 5,8,9: estimate pollutants, compute AQI, render maps
+	$(PY) pipelines/05_generate_aqi.py --config $(CONFIG)
+
+hcho:         ## Phases 7,9,10,11: HCHO hotspots + source attribution
+	$(PY) pipelines/06_hcho_analysis.py --config $(CONFIG)
+
+transport:    ## Phases 12-13: HCHO-ozone + wind transport analysis
+	$(PY) pipelines/07_transport.py --config $(CONFIG)
+
+dashboard:    ## Launch the Streamlit dashboard
+	streamlit run dashboard/app.py
+
+test:         ## Run unit tests (AQI engine, PHV, Getis-Ord are fully tested)
+	pytest -q
+
+lint:         ## Lint with ruff
+	ruff check src pipelines tests
+
+clean:        ## Remove caches and interim artifacts
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	rm -rf .pytest_cache .ruff_cache .mypy_cache

@@ -1,0 +1,155 @@
+"""CPCB National AQI engine.
+
+Sub-index by piecewise-linear interpolation between breakpoints:
+
+    I_p = (I_hi - I_lo)/(BP_hi - BP_lo) * (C_p - BP_lo) + I_lo
+
+Overall AQI = max(sub-indices), valid only when >= `min_pollutants` are present
+and at least one of `mandatory` (PM2.5 / PM10) is available.
+
+Breakpoints, averaging windows and validity rules come from
+config/aqi_breakpoints.yaml (CPCB 2014). The engine is deterministic and fully
+unit-tested (tests/test_aqi.py).
+
+Reference for the aggregation form: Wang et al. 2023 (Eq. 4-5); the max-of-sub-
+index rule matches both CPCB and the Chinese AQI. Lu et al. 2011 propose a
+Shannon-entropy alternative (RAPI) -- see aggregate_entropy() for the optional,
+publishable comparison.
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Iterable
+
+import numpy as np
+import pandas as pd
+
+
+def sub_index(conc: float, breakpoints: list[list[float]]) -> float | None:
+    """Linear-interpolated sub-index for one pollutant concentration.
+
+    breakpoints: list of [C_lo, C_hi, I_lo, I_hi]. Returns None if conc is NaN;
+    concentrations above the top breakpoint are capped at the top band.
+    """
+    if conc is None or (isinstance(conc, float) and math.isnan(conc)) or conc < 0:
+        return None
+    for c_lo, c_hi, i_lo, i_hi in breakpoints:
+        if c_lo <= conc <= c_hi:
+            return (i_hi - i_lo) / (c_hi - c_lo) * (conc - c_lo) + i_lo
+    # above the highest breakpoint -> cap at the top sub-index
+    top = breakpoints[-1]
+    return float(top[3])
+
+
+class AQIEngine:
+    """Computes CPCB sub-indices and overall AQI from a breakpoints config."""
+
+    def __init__(self, breakpoints_cfg: dict):
+        self.bp: dict[str, list[list[float]]] = breakpoints_cfg["breakpoints"]
+        self.categories = breakpoints_cfg["categories"]
+        self.mandatory = breakpoints_cfg.get("mandatory", ["pm25", "pm10"])
+        self.min_pollutants = int(breakpoints_cfg.get("min_pollutants", 3))
+
+    # --- sub-indices -------------------------------------------------------
+    def sub_indices(self, concentrations: dict[str, float]) -> dict[str, float]:
+        """Map {pollutant: concentration} -> {pollutant: sub-index} (drops None)."""
+        out = {}
+        for p, c in concentrations.items():
+            if p in self.bp:
+                si = sub_index(c, self.bp[p])
+                if si is not None:
+                    out[p] = si
+        return out
+
+    # --- overall AQI -------------------------------------------------------
+    def aqi(self, concentrations: dict[str, float]) -> tuple[float | None, str | None, str | None]:
+        """Return (AQI, dominant_pollutant, category_label) or (None, ...) if invalid.
+
+        Validity: >= min_pollutants present AND at least one mandatory pollutant.
+        """
+        si = self.sub_indices(concentrations)
+        if len(si) < self.min_pollutants or not any(m in si for m in self.mandatory):
+            return None, None, None
+        dominant = max(si, key=si.get)
+        value = si[dominant]
+        return value, dominant, self.category(value)
+
+    def category(self, aqi_value: float) -> str:
+        for band in self.categories:
+            if band["lo"] <= aqi_value <= band["hi"]:
+                return band["label"]
+        return self.categories[-1]["label"]
+
+    def color(self, aqi_value: float) -> str:
+        for band in self.categories:
+            if band["lo"] <= aqi_value <= band["hi"]:
+                return band["color"]
+        return self.categories[-1]["color"]
+
+    # --- vectorised over a DataFrame --------------------------------------
+    def compute_frame(self, df: pd.DataFrame, cols: dict[str, str] | None = None) -> pd.DataFrame:
+        """Add aqi / aqi_dominant / aqi_category columns to a per-cell DataFrame.
+
+        cols maps engine pollutant names -> DataFrame column names (defaults to
+        identity for pm25, pm10, no2, so2, co, o3).
+        """
+        cols = cols or {p: p for p in ("pm25", "pm10", "no2", "so2", "co", "o3")}
+
+        def _row(r):
+            conc = {p: r[c] for p, c in cols.items() if c in r and pd.notna(r[c])}
+            v, dom, cat = self.aqi(conc)
+            return pd.Series({"aqi": v, "aqi_dominant": dom, "aqi_category": cat})
+
+        return df.join(df.apply(_row, axis=1))
+
+    # --- vectorised grid computation (for India-scale daily maps) ----------
+    @staticmethod
+    def _sub_index_vec(conc: np.ndarray, breakpoints: list[list[float]]) -> np.ndarray:
+        """Vectorised sub-index over an array of concentrations."""
+        conc = np.asarray(conc, dtype="float64")
+        out = np.full(conc.shape, np.nan)
+        for c_lo, c_hi, i_lo, i_hi in breakpoints:
+            m = (conc >= c_lo) & (conc <= c_hi)
+            out[m] = (i_hi - i_lo) / (c_hi - c_lo) * (conc[m] - c_lo) + i_lo
+        top = breakpoints[-1]
+        out[conc > top[1]] = float(top[3])   # cap above highest breakpoint
+        out[conc < 0] = np.nan
+        return out
+
+    def aqi_grid(self, concentrations: dict[str, np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+        """Vectorised AQI over gridded concentration arrays.
+
+        Returns (aqi, dominant) arrays of the same shape. Invalid cells (fewer
+        than min_pollutants, or no mandatory pollutant) are NaN / None.
+        """
+        sis = {p: self._sub_index_vec(a, self.bp[p]) for p, a in concentrations.items() if p in self.bp}
+        names = list(sis)
+        stack = np.stack([sis[n] for n in names], axis=0)            # (P, ...)
+        valid_count = np.sum(~np.isnan(stack), axis=0)
+        has_mand = np.zeros(stack.shape[1:], dtype=bool)
+        for m in self.mandatory:
+            if m in sis:
+                has_mand |= ~np.isnan(sis[m])
+        filled = np.where(np.isnan(stack), -np.inf, stack)
+        dom_idx = np.argmax(filled, axis=0)
+        with np.errstate(invalid="ignore"):
+            aqi = np.nanmax(stack, axis=0)
+        valid = (valid_count >= self.min_pollutants) & has_mand
+        aqi = np.where(valid, aqi, np.nan)
+        dominant = np.array(names, dtype=object)[dom_idx]
+        dominant = np.where(valid, dominant, None)
+        return aqi, dominant
+
+    # --- optional entropy aggregation (Lu et al. 2011, RAPI) ---------------
+    @staticmethod
+    def aggregate_entropy(sub_indices: Iterable[float]) -> float:
+        """Shannon-entropy-weighted aggregation -- accounts for co-occurring
+        pollutants instead of max-only. Publishable comparison vs. CPCB max.
+        """
+        vals = np.array([s for s in sub_indices if s is not None and s > 0], dtype=float)
+        if vals.size == 0:
+            return float("nan")
+        p = vals / vals.sum()
+        entropy = -np.sum(p * np.log(p + 1e-12)) / math.log(len(vals)) if len(vals) > 1 else 0.0
+        return float(vals.max() * (1 + (vals.mean() / vals.max()) * entropy))

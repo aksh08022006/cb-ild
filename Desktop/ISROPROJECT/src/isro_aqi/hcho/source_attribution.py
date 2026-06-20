@@ -1,0 +1,95 @@
+"""HCHO hotspot source attribution (Phase 10).
+
+Classify each detected hotspot (cluster centroid) into one of:
+    urban         -- near a major city centre (traffic / solvent VOCs)
+    industrial    -- within an industrial corridor (point-source VOCs)
+    agri_burning  -- crop-residue belt AND coincident fire activity, in season
+    forest_fire   -- forest-fire region AND coincident fire activity, in season
+    biogenic      -- high EVI, no fire (vegetation isoprene -> HCHO)
+    other         -- none of the above
+
+Decision logic combines the static region masks (config/regions.yaml), the
+collocated MODIS/VIIRS fire signal (FRP / fire_count), land cover and EVI.
+Grounding: Kuttippurath et al. 2022 attribute Apr-May HCHO over Punjab/Haryana/MP
+/NE to biomass burning via fire+EVI; Dong et al. 2026 place HVAs in VOC-limited
+urban/industrial zones.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+
+from isro_aqi.utils.geo import haversine_km
+from isro_aqi.utils.logging import get_logger
+
+log = get_logger("attribution")
+
+
+def _in_bbox(lon, lat, bbox) -> bool:
+    return bbox[0] <= lon <= bbox[2] and bbox[1] <= lat <= bbox[3]
+
+
+def _near_city(lon, lat, urban_cfg) -> str | None:
+    for name, spec in urban_cfg.items():
+        clon, clat = spec["center"]
+        if haversine_km(lon, lat, clon, clat) <= spec["radius_km"]:
+            return name
+    return None
+
+
+def attribute(
+    hotspots: pd.DataFrame,
+    regions: dict,
+    fire_col: str = "frp_mean",
+    evi_col: str = "evi",
+    fire_threshold: float = 1.0,
+    evi_threshold: float = 0.4,
+    season: str | None = None,
+) -> pd.DataFrame:
+    """Add a `source` (and `source_detail`) column to a hotspots table.
+
+    hotspots must have at least lon/lat; fire_col/evi_col are used if present
+    (join them from the collocated database first). `season` (IMD season name)
+    gates the burning classes so a summer fire isn't attributed to winter paddy.
+    """
+    urban = regions.get("urban", {})
+    industrial = regions.get("industrial", {})
+    crop = regions.get("crop_burning", {})
+    forest = regions.get("forest_fire", {})
+
+    sources, details = [], []
+    for _, r in hotspots.iterrows():
+        lon, lat = float(r["lon"]), float(r["lat"])
+        fire = float(r.get(fire_col, 0) or 0)
+        evi = float(r.get(evi_col, 0) or 0)
+        src, detail = "other", None
+
+        city = _near_city(lon, lat, urban)
+        if city:
+            src, detail = "urban", city
+
+        for name, spec in industrial.items():
+            if "bbox" in spec and _in_bbox(lon, lat, spec["bbox"]):
+                src, detail = "industrial", name
+
+        if fire >= fire_threshold:
+            for name, spec in crop.items():
+                in_season = season is None or season in spec.get("seasons", [])
+                if _in_bbox(lon, lat, spec["bbox"]) and in_season:
+                    src, detail = "agri_burning", name
+            for name, spec in forest.items():
+                in_season = season is None or season in spec.get("seasons", [])
+                if _in_bbox(lon, lat, spec["bbox"]) and in_season:
+                    src, detail = "forest_fire", name
+
+        if src == "other" and evi >= evi_threshold and fire < fire_threshold:
+            src = "biogenic"
+
+        sources.append(src)
+        details.append(detail)
+
+    out = hotspots.copy()
+    out["source"] = sources
+    out["source_detail"] = details
+    log.info(f"attributed {len(out)} hotspots: {out['source'].value_counts().to_dict()}")
+    return out
