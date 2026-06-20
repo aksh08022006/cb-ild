@@ -17,7 +17,11 @@ yields a seasonal AQI map; per-day ingestion (for daily CNN-LSTM) is the next st
 
 from __future__ import annotations
 
+import gzip
+import io
 import json
+import os
+import re
 import sys
 from pathlib import Path
 
@@ -109,6 +113,67 @@ def load_cpcb_seasonal():
     return agg, None
 
 
+# ---- OpenAQ path: same CPCB station measurements, no captcha (free API key) ----
+def _archive_keys(loc, year, months):
+    keys = []
+    for m in months:
+        url = (f"https://openaq-data-archive.s3.amazonaws.com/?list-type=2"
+               f"&prefix=records/csv.gz/locationid={loc}/year={year}/month={m:02d}/&max-keys=400")
+        keys += re.findall(r"<Key>([^<]+)</Key>", requests.get(url, timeout=30).text)
+    return keys
+
+
+def _download_location(loc, year, months):
+    frames = []
+    for k in _archive_keys(loc, year, months):
+        r = requests.get(f"https://openaq-data-archive.s3.amazonaws.com/{k}", timeout=60)
+        if r.status_code == 200:
+            try:
+                frames.append(pd.read_csv(io.StringIO(gzip.decompress(r.content).decode())))
+            except Exception:
+                pass
+    return pd.concat(frames, ignore_index=True) if frames else None
+
+
+def load_openaq_seasonal(api_key, start, end):
+    """Real Indian CPCB-station data via OpenAQ: keyed location list + keyless archive."""
+    H = {"X-API-Key": api_key}
+    locs, page = [], 1
+    while True:
+        r = requests.get("https://api.openaq.org/v3/locations", headers=H,
+                         params={"iso": "IN", "limit": 1000, "page": page}, timeout=60)
+        r.raise_for_status()
+        res = r.json().get("results", [])
+        locs += res
+        if len(res) < 1000:
+            break
+        page += 1
+    print(f"OpenAQ: {len(locs)} Indian stations listed")
+    yr, months = int(start[:4]), list(range(int(start[5:7]), int(end[5:7]) + 1))
+    rows = []
+    for loc in locs:
+        c = loc.get("coordinates") or {}
+        lat, lon = c.get("latitude"), c.get("longitude")
+        if lat is None or lon is None:
+            continue
+        raw = _download_location(loc["id"], yr, months)
+        if raw is None or raw.empty or "parameter" not in raw:
+            continue
+        wide = raw.pivot_table(index="datetime", columns="parameter", values="value", aggfunc="mean").reset_index()
+        wide["station_id"] = f"openaq-{loc['id']}"
+        daily = cpcb.to_daily(wide)
+        if daily.empty:
+            continue
+        agg = daily.mean(numeric_only=True)
+        rows.append({"station_id": f"openaq-{loc['id']}", "lat": lat, "lon": lon,
+                     "pm25": agg.get("pm25"), "pm10": agg.get("pm10"),
+                     "no2_obs": agg.get("no2"), "so2_obs": agg.get("so2"),
+                     "o3_obs": agg.get("o3"), "co_obs": agg.get("co")})
+    df = pd.DataFrame(rows).dropna(subset=["lat", "lon"])
+    print(f"OpenAQ seasonal ground-truth table: {len(df)} stations with data")
+    return df
+
+
 def main():
     cfg = load_config("config/config.yaml")
     init_ee(cfg)
@@ -119,11 +184,22 @@ def main():
     stack.to_netcdf("data/interim/daily_real.nc")
     print("-> data/interim/daily_real.nc (real predictor stack saved)")
 
-    cpcb_tbl, err = load_cpcb_seasonal()
-    if cpcb_tbl is None:
-        print(f"\nCPCB step skipped: {err}")
-        print("Add CPCB station CSVs (Oct-Dec 2021) to data/external/ and re-run for a REAL, validated AQI map.")
-        return
+    api_key = os.environ.get("OPENAQ_API_KEY")
+    if api_key:
+        print("\nground truth: OpenAQ (Indian CPCB-station measurements, no captcha)")
+        cpcb_tbl = load_openaq_seasonal(api_key, START, END)
+        if cpcb_tbl is None or cpcb_tbl.empty:
+            print("OpenAQ returned no station data for this window — try a recent season or use CPCB CSVs.")
+            return
+    else:
+        cpcb_tbl, err = load_cpcb_seasonal()
+        if cpcb_tbl is None:
+            print(f"\nGround-truth step skipped: {err}")
+            print("To finish Objective 1, EITHER:")
+            print("  - free OpenAQ key (1 min, no captcha): https://explore.openaq.org/register")
+            print("      then:  OPENAQ_API_KEY=your_key make real")
+            print("  - OR drop CPCB station CSVs (Oct-Dec 2021) into data/external/ and re-run.")
+            return
 
     stations = cpcb_tbl[["station_id", "lat", "lon"]].copy()
     predictors = sample_at_stations(stack, stations)
