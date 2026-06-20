@@ -144,6 +144,8 @@ def main():
     # ===== [8] dual AQI atlas: CPCB + RAPI + divergence ===================
     log.info("[8/10] dual AQI atlas (CPCB Main + RAPI USP + divergence)")
     hybrid_full = HybridModel(TARGETS, features).fit(training)
+    import joblib
+    joblib.dump(hybrid_full, "models/hybrid.joblib")          # for export_web.py / inference
     burn_idx = int(np.argmax([float(stack["frp_mean"].isel(time=i).mean())
                               for i in range(stack.sizes["time"])]))
     summary["aqi"] = _aqi_maps(stack, hybrid_full, features, engine, burn_idx)

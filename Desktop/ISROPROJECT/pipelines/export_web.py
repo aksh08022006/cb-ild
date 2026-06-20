@@ -1,16 +1,20 @@
 #!/usr/bin/env python
-"""Export real pipeline outputs to web/public/data/*.json for MapLibre + deck.gl.
+"""Export the REAL (redesigned) model's outputs to web/public/data/*.json.
 
-Reads the trained model + the gridded stack + the HCHO hotspot / back-trajectory /
-fire artifacts produced by run_demo.py and writes compact JSON the frontend renders:
+Reads the trained HYBRID model (trend + kriged residual) + the gridded stack +
+the HCHO hotspot / back-trajectory / fire artifacts produced by run_demo.py (on
+synthetic data today; on real satellite data once the pipeline runs), and writes
+compact JSON the MapLibre + deck.gl frontend renders:
 
-  aqi_frames.json   N time frames of per-cell AQI (model -> CPCB engine)
+  aqi_frames.json   N time frames of per-cell [lon,lat,CPCB-AQI,RAPI]  (hybrid -> engine)
   gas_grids.json    seasonal-mean per-cell columns for AOD/NO2/SO2/CO/O3/HCHO (0..1)
   hcho_grid.json    seasonal-mean per-cell HCHO (0..1) for the hotspot basemap
   hotspots.json     attributed HCHO hotspots (lon/lat/source/frp)
   fires.json        downsampled VIIRS-style fire pixels
   trajectory.json   Delhi 48h back-trajectory path
-  india.geojson     national outline (from the coarse polygon)
+
+The national outline web/public/data/india.geojson is the OFFICIAL Survey-of-India
+boundary and is intentionally NOT overwritten here.
 
 Run after `make demo`:  python pipelines/export_web.py
 """
@@ -30,30 +34,29 @@ from matplotlib.path import Path as MplPath
 
 sys.path.insert(0, "src")
 from isro_aqi.aqi import AQIEngine  # noqa: E402
-from isro_aqi.database.schema import PREDICTORS  # noqa: E402
 from isro_aqi.features import add_engineered_features  # noqa: E402
 
 OUT = Path("web/public/data")
 OUT.mkdir(parents=True, exist_ok=True)
 
-# coarse India polygon (matches web/lib/india.ts) for masking ocean cells
-INDIA_POLY = [
-    [77.0, 35.5], [78.5, 34.5], [80.0, 32.5], [81.0, 30.3], [83.5, 29.0], [85.5, 28.2],
-    [88.0, 27.2], [88.8, 26.5], [89.8, 26.0], [92.0, 27.5], [94.5, 27.8], [97.0, 28.2],
-    [96.5, 27.0], [95.2, 26.6], [94.0, 24.0], [93.4, 24.0], [93.0, 22.2], [91.0, 23.0],
-    [89.0, 22.0], [88.0, 21.6], [87.0, 21.3], [85.8, 20.3], [84.5, 18.5], [82.5, 17.0],
-    [80.3, 15.8], [80.2, 13.5], [79.8, 11.5], [78.2, 8.5], [77.5, 8.1], [76.5, 8.9],
-    [75.7, 11.5], [74.7, 14.5], [73.5, 16.0], [72.9, 18.5], [72.7, 20.5], [70.5, 20.8],
-    [69.0, 22.2], [68.2, 23.7], [69.5, 24.0], [70.5, 25.5], [73.0, 27.5], [74.0, 29.0],
-    [75.0, 31.5], [76.0, 33.5], [77.0, 35.5],
-]
-_PATH = MplPath(np.array(INDIA_POLY))
+# engine pollutant -> model target column
+AQI_MAP = {"pm25": "pm25", "pm10": "pm10", "no2": "no2_obs",
+           "so2": "so2_obs", "o3": "o3_obs", "co": "co_obs"}
+
+
+def india_mask_path() -> MplPath:
+    """Build an ocean mask from the OFFICIAL India boundary (largest landmass ring)."""
+    gj = json.loads((OUT / "india.geojson").read_text())
+    polys = gj["features"][0]["geometry"]["coordinates"]
+    area = lambda r: (max(p[0] for p in r) - min(p[0] for p in r)) * (max(p[1] for p in r) - min(p[1] for p in r))  # noqa: E731
+    mainland = max((p[0] for p in polys), key=area)
+    return MplPath(np.array(mainland))
 
 
 def write(name: str, obj) -> None:
     p = OUT / name
     p.write_text(json.dumps(obj, separators=(",", ":")))
-    print(f"  {name}: {p.stat().st_size/1024:.0f} KB")
+    print(f"  {name}: {p.stat().st_size / 1024:.0f} KB")
 
 
 def grid_df(day_ds: xr.Dataset, date, features):
@@ -67,41 +70,41 @@ def grid_df(day_ds: xr.Dataset, date, features):
 
 
 def main():
-    print("loading stack + model …")
+    print("loading stack + hybrid model …")
     stack = xr.open_dataset("data/interim/daily.nc")
-    rf = joblib.load("models/rf.joblib")
-    features = [c for c in PREDICTORS if c in rf.features] or rf.features
+    model = joblib.load("models/hybrid.joblib")          # the redesigned hybrid
+    features = list(model.features)
     engine = AQIEngine(yaml.safe_load(open("config/aqi_breakpoints.yaml")))
     times = pd.to_datetime(stack["time"].values)
-    AQI_MAP = {"pm25": "pm25", "pm10": "pm10", "no2": "no2_obs", "o3": "o3_obs", "co": "co_obs"}
+    PATH = india_mask_path()
 
-    # ---- AQI time frames ------------------------------------------------
-    print("predicting AQI frames …")
-    idxs = np.linspace(0, len(times) - 1, 8).astype(int)
+    # ---- AQI time frames: CPCB + RAPI from the hybrid model -------------
+    print("predicting AQI frames (CPCB + RAPI) …")
+    idxs = np.unique(np.linspace(0, len(times) - 1, 8).astype(int))
     frames = []
     for fi in idxs:
         day = stack.isel(time=int(fi))
         df = grid_df(day, times[fi], features)
-        pred = rf.predict(df)
+        pred = model.predict(df)
         conc = {e: pred[c].to_numpy() for e, c in AQI_MAP.items() if c in pred}
-        aqi, _ = engine.aqi_grid(conc)
-        lon = df["lon"].to_numpy(); lat = df["lat"].to_numpy()
-        inside = _PATH.contains_points(np.column_stack([lon, lat]))
+        out = engine.compute_grid(conc)                  # cpcb, rapi, dominant, divergence
+        lon, lat = df["lon"].to_numpy(), df["lat"].to_numpy()
+        inside = PATH.contains_points(np.column_stack([lon, lat]))
+        cpcb, rapi = out["cpcb"], out["rapi"]
         cells = [
-            [round(float(lon[i]), 2), round(float(lat[i]), 2), int(aqi[i])]
-            for i in range(len(aqi))
-            if inside[i] and np.isfinite(aqi[i])
+            [round(float(lon[i]), 2), round(float(lat[i]), 2), int(cpcb[i]), int(rapi[i])]
+            for i in range(len(cpcb)) if inside[i] and np.isfinite(cpcb[i])
         ]
         frames.append({"date": str(times[fi].date()), "cells": cells})
-    write("aqi_frames.json", {"key": ["lon", "lat", "aqi"], "frames": frames})
+    write("aqi_frames.json", {"key": ["lon", "lat", "aqi", "rapi"], "frames": frames})
 
     # ---- gas seasonal-mean grids (normalised 0..1) ----------------------
     print("exporting gas grids …")
-    gases = ["aod", "no2", "so2", "co", "o3", "hcho"]
+    gases = [g for g in ["aod", "no2", "so2", "co", "o3", "hcho"] if g in stack]
     mean = stack[gases].mean("time")
     lon2d, lat2d = np.meshgrid(stack["lon"].values, stack["lat"].values)
     lonf, latf = lon2d.ravel(), lat2d.ravel()
-    inside = _PATH.contains_points(np.column_stack([lonf, latf]))
+    inside = PATH.contains_points(np.column_stack([lonf, latf]))
     norm = {}
     for g in gases:
         v = mean[g].values.ravel()
@@ -114,7 +117,7 @@ def main():
         for i in range(len(lonf)) if inside[i]
     ]
     write("gas_grids.json", {"gases": gases, "cells": gas_cells})
-    write("hcho_grid.json", [[c["lon"], c["lat"], c["hcho"]] for c in gas_cells])
+    write("hcho_grid.json", [[c["lon"], c["lat"], c.get("hcho", 0)] for c in gas_cells])
 
     # ---- hotspots / fires / trajectory (real artifacts) -----------------
     print("exporting hotspots / fires / trajectory …")
@@ -137,15 +140,7 @@ def main():
     traj = pd.read_csv("outputs/delhi_backtrajectory.csv")
     write("trajectory.json", [[round(float(r.lon), 2), round(float(r.lat), 2)] for r in traj.itertuples()])
 
-    # ---- india outline geojson -----------------------------------------
-    write("india.geojson", {
-        "type": "FeatureCollection",
-        "features": [{
-            "type": "Feature", "properties": {"name": "India"},
-            "geometry": {"type": "Polygon", "coordinates": [INDIA_POLY]},
-        }],
-    })
-    print("done -> web/public/data/")
+    print("done -> web/public/data/  (india.geojson left untouched — official boundary)")
 
 
 if __name__ == "__main__":
