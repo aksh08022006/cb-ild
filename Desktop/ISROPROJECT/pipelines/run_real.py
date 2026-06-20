@@ -32,6 +32,8 @@ import requests
 import rioxarray  # noqa: F401
 import xarray as xr
 import yaml
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import KFold
 
 sys.path.insert(0, "src")
 from isro_aqi.aqi import AQIEngine  # noqa: E402
@@ -46,7 +48,9 @@ from isro_aqi.preprocessing.calibrate_no2 import calibrate_no2_stack  # noqa: E4
 from isro_aqi.preprocessing.collocate import join_targets, sample_at_stations  # noqa: E402
 from isro_aqi.preprocessing.gapfill_aod import fill_aod_stack  # noqa: E402
 
-START, END = "2021-10-01", "2021-12-31"
+# Oct-Dec 2025 burning season: the recent window with BOTH OpenAQ ground truth
+# AND TROPOMI satellite data (OpenAQ India archive skips 2019-2024; TROPOMI starts 2018).
+START, END = "2025-10-01", "2025-12-31"
 SCALE = 27830  # ~0.25 deg predictor grid
 WEB = Path("web/public/data")
 TARGETS = ["pm25", "pm10", "no2_obs", "so2_obs", "o3_obs", "co_obs"]
@@ -68,7 +72,11 @@ def _dl(ee_img, names, region, tag):
 
 
 def fetch_predictor_stack(cfg) -> xr.Dataset:
-    """Real seasonal-mean predictor stack over India, straight from GEE."""
+    """Real seasonal-mean predictor stack over India, straight from GEE (cached)."""
+    cache = Path("data/interim/daily_real.nc")
+    if cache.exists():
+        print(f"using cached predictor stack: {cache}")
+        return xr.open_dataset(cache).load()
     region = aoi_geometry(cfg)
     print("fetching real predictors via GEE …")
     layers: dict[str, xr.DataArray] = {}
@@ -86,7 +94,9 @@ def fetch_predictor_stack(cfg) -> xr.Dataset:
     ref = layers["no2"]
     aligned = {k: (v if k == "no2" else v.interp(lon=ref.lon, lat=ref.lat)) for k, v in layers.items()}
     ds = xr.Dataset({k: v.expand_dims(time=[pd.Timestamp(START)]) for k, v in aligned.items()})
-    print(f"predictor stack: {dict(ds.sizes)} | {len(ds.data_vars)} vars")
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    ds.to_netcdf(cache)
+    print(f"predictor stack: {dict(ds.sizes)} | {len(ds.data_vars)} vars -> {cache}")
     return ds
 
 
@@ -125,7 +135,7 @@ def _archive_keys(loc, year, months):
 
 def _download_location(loc, year, months):
     frames = []
-    for k in _archive_keys(loc, year, months):
+    for k in _archive_keys(loc, year, months)[::3]:   # every 3rd day = representative seasonal sample, 3x faster
         r = requests.get(f"https://openaq-data-archive.s3.amazonaws.com/{k}", timeout=60)
         if r.status_code == 200:
             try:
@@ -135,8 +145,31 @@ def _download_location(loc, year, months):
     return pd.concat(frames, ignore_index=True) if frames else None
 
 
-def load_openaq_seasonal(api_key, start, end):
-    """Real Indian CPCB-station data via OpenAQ: keyed location list + keyless archive."""
+def _station_seasonal(loc, yr, months):
+    """One station -> seasonal-mean record (predictor-agnostic ground truth)."""
+    c = loc.get("coordinates") or {}
+    lat, lon = c.get("latitude"), c.get("longitude")
+    if lat is None or lon is None:
+        return None
+    raw = _download_location(loc["id"], yr, months)
+    if raw is None or raw.empty or "parameter" not in raw:
+        return None
+    wide = raw.pivot_table(index="datetime", columns="parameter", values="value", aggfunc="mean").reset_index()
+    wide["station_id"] = f"openaq-{loc['id']}"
+    daily = cpcb.to_daily(wide)
+    if daily.empty:
+        return None
+    agg = daily.mean(numeric_only=True)
+    return {"station_id": f"openaq-{loc['id']}", "lat": lat, "lon": lon,
+            "pm25": agg.get("pm25"), "pm10": agg.get("pm10"),
+            "no2_obs": agg.get("no2"), "so2_obs": agg.get("so2"),
+            "o3_obs": agg.get("o3"), "co_obs": agg.get("co")}
+
+
+def load_openaq_seasonal(api_key, start, end, max_stations=250, workers=24):
+    """Real Indian CPCB-station data via OpenAQ: keyed location list + parallel keyless archive."""
+    from concurrent.futures import ThreadPoolExecutor
+
     H = {"X-API-Key": api_key}
     locs, page = [], 1
     while True:
@@ -145,32 +178,184 @@ def load_openaq_seasonal(api_key, start, end):
         r.raise_for_status()
         res = r.json().get("results", [])
         locs += res
-        if len(res) < 1000:
+        if len(res) < 1000 or page >= 5:
             break
         page += 1
-    print(f"OpenAQ: {len(locs)} Indian stations listed")
+    locs = [loc for loc in locs if (loc.get("coordinates") or {}).get("latitude") is not None][:max_stations]
+    print(f"OpenAQ: {len(locs)} Indian stations (capped at {max_stations}); downloading archive in parallel …")
     yr, months = int(start[:4]), list(range(int(start[5:7]), int(end[5:7]) + 1))
     rows = []
-    for loc in locs:
-        c = loc.get("coordinates") or {}
-        lat, lon = c.get("latitude"), c.get("longitude")
-        if lat is None or lon is None:
-            continue
-        raw = _download_location(loc["id"], yr, months)
-        if raw is None or raw.empty or "parameter" not in raw:
-            continue
-        wide = raw.pivot_table(index="datetime", columns="parameter", values="value", aggfunc="mean").reset_index()
-        wide["station_id"] = f"openaq-{loc['id']}"
-        daily = cpcb.to_daily(wide)
-        if daily.empty:
-            continue
-        agg = daily.mean(numeric_only=True)
-        rows.append({"station_id": f"openaq-{loc['id']}", "lat": lat, "lon": lon,
-                     "pm25": agg.get("pm25"), "pm10": agg.get("pm10"),
-                     "no2_obs": agg.get("no2"), "so2_obs": agg.get("so2"),
-                     "o3_obs": agg.get("o3"), "co_obs": agg.get("co")})
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for i, res in enumerate(ex.map(lambda loc: _station_seasonal(loc, yr, months), locs)):
+            if res:
+                rows.append(res)
+            if (i + 1) % 40 == 0:
+                print(f"  …{i + 1}/{len(locs)} processed, {len(rows)} with data")
     df = pd.DataFrame(rows).dropna(subset=["lat", "lon"])
-    print(f"OpenAQ seasonal ground-truth table: {len(df)} stations with data")
+    print(f"OpenAQ seasonal ground-truth: {len(df)} stations with usable data")
+    return df
+
+
+# ---- DAILY path: station x day samples (captures the AOD<->PM2.5 daily covariance) ----
+TARGET_CAPS = {  # physically-plausible ranges; outside -> NaN (drops bad sensor/unit spikes)
+    "pm25": (1, 1000), "pm10": (1, 2000), "no2_obs": (0, 400),
+    "so2_obs": (0, 400), "o3_obs": (1, 400), "co_obs": (0, 50),
+}
+
+
+def clean_targets(df):
+    for c, (lo, hi) in TARGET_CAPS.items():
+        if c in df:
+            df.loc[(df[c] < lo) | (df[c] > hi), c] = np.nan
+    return df
+
+
+def _station_daily(loc, yr, months):
+    c = loc.get("coordinates") or {}
+    lat, lon = c.get("latitude"), c.get("longitude")
+    if lat is None or lon is None:
+        return None
+    raw = _download_location(loc["id"], yr, months)
+    if raw is None or raw.empty or "parameter" not in raw:
+        return None
+    wide = raw.pivot_table(index="datetime", columns="parameter", values="value", aggfunc="mean").reset_index()
+    wide["station_id"] = f"openaq-{loc['id']}"
+    daily = cpcb.to_daily(wide)
+    if daily.empty:
+        return None
+    daily["lat"], daily["lon"] = lat, lon
+    return daily.rename(columns={"no2": "no2_obs", "so2": "so2_obs", "o3": "o3_obs", "co": "co_obs"})
+
+
+def load_openaq_daily(api_key, start, end, max_stations=250, workers=24):
+    """Real Indian CPCB station x day table via OpenAQ (cached)."""
+    cache = Path("data/interim/openaq_daily.parquet")
+    if cache.exists():
+        print(f"using cached daily ground truth: {cache}")
+        return pd.read_parquet(cache)
+    from concurrent.futures import ThreadPoolExecutor
+
+    H = {"X-API-Key": api_key}
+    locs, page = [], 1
+    while True:
+        r = requests.get("https://api.openaq.org/v3/locations", headers=H,
+                         params={"iso": "IN", "limit": 1000, "page": page}, timeout=60)
+        r.raise_for_status()
+        res = r.json().get("results", [])
+        locs += res
+        if len(res) < 1000 or page >= 5:
+            break
+        page += 1
+    locs = [loc for loc in locs if (loc.get("coordinates") or {}).get("latitude") is not None][:max_stations]
+    print(f"OpenAQ: {len(locs)} Indian stations; downloading daily archive in parallel …")
+    yr, months = int(start[:4]), list(range(int(start[5:7]), int(end[5:7]) + 1))
+    frames = []
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        for i, d in enumerate(ex.map(lambda loc: _station_daily(loc, yr, months), locs)):
+            if d is not None:
+                frames.append(d)
+            if (i + 1) % 40 == 0:
+                print(f"  …{i + 1}/{len(locs)}, {len(frames)} stations with data")
+    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    df["date"] = pd.to_datetime(df["date"])
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(cache)
+    print(f"OpenAQ daily ground-truth: {len(df)} station-days from {df['station_id'].nunique()} stations")
+    return df
+
+
+def _daily_at_points(coll, bands, mp, scale):
+    """getRegion an ImageCollection at station points -> daily-mean (lon,lat,date,bands)."""
+    arr = coll.select(bands).getRegion(mp, scale=scale).getInfo()
+    hdr = arr[0]
+    df = pd.DataFrame(arr[1:], columns=hdr)
+    df["date"] = pd.to_datetime(df["time"], unit="ms").dt.floor("D")
+    df["lon"] = df["longitude"].astype(float).round(3)
+    df["lat"] = df["latitude"].astype(float).round(3)
+    for b in bands:
+        df[b] = pd.to_numeric(df[b], errors="coerce")
+    return df.groupby(["lon", "lat", "date"], as_index=False)[bands].mean()
+
+
+GAS_ASSETS = {
+    "no2": ("COPERNICUS/S5P/OFFL/L3_NO2", "tropospheric_NO2_column_number_density"),
+    "so2": ("COPERNICUS/S5P/OFFL/L3_SO2", "SO2_column_number_density"),
+    "co": ("COPERNICUS/S5P/OFFL/L3_CO", "CO_column_number_density"),
+    "o3": ("COPERNICUS/S5P/OFFL/L3_O3", "O3_column_number_density"),
+    "hcho": ("COPERNICUS/S5P/OFFL/L3_HCHO", "tropospheric_HCHO_column_number_density"),
+}
+
+
+def fetch_daily_predictors(stations, start, end):
+    """Daily predictor table at station points via getRegion (cached)."""
+    cache = Path("data/interim/pred_daily.parquet")
+    if cache.exists():
+        print(f"using cached daily predictors: {cache}")
+        return pd.read_parquet(cache)
+    from scipy.spatial import cKDTree
+    sids = stations["station_id"].to_numpy()
+    tree = cKDTree(stations[["lon", "lat"]].to_numpy())
+    mp = ee.Geometry.MultiPoint([[float(r.lon), float(r.lat)] for r in stations.itertuples()])
+
+    def to_sid(df):
+        """getRegion returns PIXEL-CENTER coords (differ per source scale) -> map each row to its
+        nearest station, then mean per (station, date). This is what lets sources merge cleanly."""
+        dist, idx = tree.query(df[["lon", "lat"]].to_numpy(), k=1)
+        df = df.assign(station_id=sids[idx])[dist <= 0.12]   # within ~13 km of a station
+        bands = [c for c in df.columns if c not in ("lon", "lat", "date", "station_id")]
+        return df.groupby(["station_id", "date"], as_index=False)[bands].mean()
+
+    print("fetching daily predictors at stations via getRegion …")
+    out = None
+    for g, (asset, band) in GAS_ASSETS.items():
+        d = to_sid(_daily_at_points(ee.ImageCollection(asset).filterDate(start, end), [band], mp, 5000).rename(columns={band: g}))
+        out = d if out is None else out.merge(d, on=["station_id", "date"], how="outer")
+        print(f"  ✓ {g}")
+    era5b = ["temperature_2m", "u_component_of_wind_10m", "v_component_of_wind_10m", "surface_pressure", "total_precipitation_sum"]
+    d = to_sid(_daily_at_points(ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR").filterDate(start, end), era5b, mp, 11132).rename(
+        columns={"temperature_2m": "temperature", "u_component_of_wind_10m": "u_wind",
+                 "v_component_of_wind_10m": "v_wind", "surface_pressure": "pressure", "total_precipitation_sum": "precipitation"}))
+    out = out.merge(d, on=["station_id", "date"], how="outer"); print("  ✓ met")
+    try:  # composite MAIAC granules to ~90 DAILY means first (else getRegion exceeds 1M elements)
+        base = ee.Date(start)
+        ndays = ee.Date(end).difference(base, "day")
+        gran = ee.ImageCollection("MODIS/061/MCD19A2_GRANULES").select("Optical_Depth_055").filterDate(start, end)
+        def _daily_aod(i):
+            d0 = base.advance(ee.Number(i), "day")
+            return gran.filterDate(d0, d0.advance(1, "day")).mean().multiply(0.001).set("system:time_start", d0.millis())
+        aod_coll = ee.ImageCollection(ee.List.sequence(0, ndays.subtract(1)).map(_daily_aod))
+        d = to_sid(_daily_at_points(aod_coll, ["Optical_Depth_055"], mp, 1000).rename(columns={"Optical_Depth_055": "aod"}))
+        out = out.merge(d, on=["station_id", "date"], how="outer"); print("  ✓ aod")
+    except Exception as e:
+        print(f"  daily AOD skipped: {e}")
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(cache)
+    print(f"daily predictors: {len(out)} station-days")
+    return out
+
+
+def fetch_map_grid(cfg):
+    """Seasonal-mean predictor GRID over India with the SAME raw bands as the daily fetch (cached)."""
+    cache = Path("data/interim/map_grid.parquet")
+    if cache.exists():
+        print(f"using cached map grid: {cache}")
+        return pd.read_parquet(cache)
+    region = aoi_geometry(cfg)
+    print("fetching seasonal map grid …")
+    L = {}
+    for g, (asset, band) in GAS_ASSETS.items():
+        L.update(_dl(ee.ImageCollection(asset).select(band).filterDate(START, END).mean(), [g], region, f"mg_{g}"))
+    era5 = (ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR").filterDate(START, END).mean()
+            .select(["temperature_2m", "u_component_of_wind_10m", "v_component_of_wind_10m", "surface_pressure", "total_precipitation_sum"]))
+    L.update(_dl(era5, ["temperature", "u_wind", "v_wind", "pressure", "precipitation"], region, "mg_met"))
+    aod = ee.ImageCollection("MODIS/061/MCD19A2_GRANULES").select("Optical_Depth_055").filterDate(START, END).mean().multiply(0.001)
+    L.update(_dl(aod, ["aod"], region, "mg_aod"))
+    ref = L["no2"]
+    al = {k: (v if k == "no2" else v.interp(lon=ref.lon, lat=ref.lat)) for k, v in L.items()}
+    df = xr.Dataset(al).to_dataframe().reset_index().dropna(subset=["no2"])
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(cache)
+    print(f"map grid: {len(df)} cells")
     return df
 
 
@@ -179,71 +364,70 @@ def main():
     init_ee(cfg)
     engine = AQIEngine(cfg.aqi_breakpoints)
 
-    stack = fetch_predictor_stack(cfg)
-    Path("data/interim").mkdir(parents=True, exist_ok=True)
-    stack.to_netcdf("data/interim/daily_real.nc")
-    print("-> data/interim/daily_real.nc (real predictor stack saved)")
-
     api_key = os.environ.get("OPENAQ_API_KEY")
-    if api_key:
-        print("\nground truth: OpenAQ (Indian CPCB-station measurements, no captcha)")
-        cpcb_tbl = load_openaq_seasonal(api_key, START, END)
-        if cpcb_tbl is None or cpcb_tbl.empty:
-            print("OpenAQ returned no station data for this window — try a recent season or use CPCB CSVs.")
-            return
-    else:
-        cpcb_tbl, err = load_cpcb_seasonal()
-        if cpcb_tbl is None:
-            print(f"\nGround-truth step skipped: {err}")
-            print("To finish Objective 1, EITHER:")
-            print("  - free OpenAQ key (1 min, no captcha): https://explore.openaq.org/register")
-            print("      then:  OPENAQ_API_KEY=your_key make real")
-            print("  - OR drop CPCB station CSVs (Oct-Dec 2021) into data/external/ and re-run.")
-            return
+    if not api_key:
+        print("\nSet OPENAQ_API_KEY (free, no captcha: https://explore.openaq.org/register), then:")
+        print("  OPENAQ_API_KEY=your_key make real")
+        return
 
-    stations = cpcb_tbl[["station_id", "lat", "lon"]].copy()
-    predictors = sample_at_stations(stack, stations)
-    training = join_targets(predictors, cpcb_tbl.assign(date=pd.Timestamp(START)))
+    # ---- daily ground truth + daily predictors at stations ----
+    cpcb_daily = clean_targets(load_openaq_daily(api_key, START, END))
+    if cpcb_daily.empty:
+        print("OpenAQ returned no station data for this window."); return
+    stations = cpcb_daily.groupby("station_id", as_index=False)[["lat", "lon"]].first()
+    pred = fetch_daily_predictors(stations, START, END)
+    for _d in (pred, cpcb_daily):                    # align tz-aware (CPCB local) vs naive (satellite UTC) dates
+        _d["date"] = pd.to_datetime(_d["date"])
+        if _d["date"].dt.tz is not None:
+            _d["date"] = _d["date"].dt.tz_localize(None)
+        _d["date"] = _d["date"].dt.normalize()
+    training = pred.merge(cpcb_daily.drop(columns=["lat", "lon"]), on=["station_id", "date"], how="inner")
+    training = training.merge(stations, on="station_id", how="left")
     training = add_engineered_features(training, lag_cols=None)
-    features = [c for c in stack.data_vars if c in training.columns] + ["lat", "lon", "fnr", "doy_sin", "doy_cos"]
-    features = [c for c in dict.fromkeys(features) if c in training.columns]
-    print(f"training table: {len(training)} stations x {len(features)} features")
+    pred_cols = [c for c in pred.columns if c not in ("station_id", "date")]
+    features = list(dict.fromkeys([c for c in pred_cols + ["lat", "lon", "fnr", "doy_sin", "doy_cos"] if c in training.columns]))
+    print(f"training: {len(training)} station-days x {len(features)} features ({training['station_id'].nunique()} stations)")
 
-    if "no2" in training and "no2_obs" in training:
-        _, no2 = calibrate_no2_stack(stack, training)
-        print(f"NO2 calibration: r2={no2['r2']:.3f}")
+    def fit_rf(df, t):
+        return RandomForestRegressor(n_estimators=300, min_samples_leaf=2, n_jobs=-1, random_state=0).fit(
+            df[features].fillna(0.0), df[t])
 
-    # spatial cross-validation -> the honest, real R²/RMSE/MAE
-    print("\n=== REAL spatial cross-validation (leave-station-blocks-out) ===")
+    # ---- validation: random CV (held-out days, literature-comparable) + spatial CV (held-out regions) ----
+    print("\n=== REAL validation: random CV (held-out days) | spatial CV (held-out regions) ===")
+    print(f"  {'target':8s} {'randomR²':>9s} {'spatialR²':>10s} {'RMSE':>7s} {'MAE':>6s}   India target")
     report = {}
     for t in TARGETS:
         sub = training.dropna(subset=[t])
-        if len(sub) < 30:
+        if sub["station_id"].nunique() < 12 or len(sub) < 150:
             continue
-        preds, trues = [], []
-        for tr, va in spatial_blocks(sub, block_deg=2.0, k=5):
-            if len(va) < 3 or len(tr) < 20:
+        y = sub[t].to_numpy()
+        # random 5-fold (new days at known stations) -> the metric most satellite-AQI papers report
+        Pr = np.zeros(len(y))
+        for a, b in KFold(5, shuffle=True, random_state=0).split(sub):
+            Pr[b] = fit_rf(sub.iloc[a], t).predict(sub.iloc[b][features].fillna(0.0))
+        mr = metrics(y, Pr)
+        # spatial leave-station-blocks-out (unmonitored regions) -> the hard extrapolation metric
+        Ps, Ys = [], []
+        for trn, va in spatial_blocks(sub, block_deg=2.0, k=5):
+            if va["station_id"].nunique() < 2 or len(trn) < 100:
                 continue
-            m = HybridModel([t], features).fit(tr)
-            preds.append(m.predict(va)[t].to_numpy()); trues.append(va[t].to_numpy())
-        if preds:
-            P, Y = np.concatenate(preds), np.concatenate(trues)
-            report[t] = metrics(Y, P)
-            bench = INDIA_BENCHMARK_R2.get(t.replace("_obs", ""))
-            print(f"  {t:8s} R={np.sqrt(max(report[t]['r2'],0)):.2f} R²={report[t]['r2']:.3f} "
-                  f"RMSE={report[t]['rmse']:.2f} MAE={report[t]['mae']:.2f}  (India target R² {bench})")
+            Ps.append(fit_rf(trn, t).predict(va[features].fillna(0.0))); Ys.append(va[t].to_numpy())
+        ms = metrics(np.concatenate(Ys), np.concatenate(Ps)) if Ps else {"r2": float("nan"), "rmse": float("nan"), "mae": float("nan")}
+        bench = INDIA_BENCHMARK_R2.get(t.replace("_obs", ""))
+        report[t] = {"n": int(len(sub)), "stations": int(sub["station_id"].nunique()), "random_cv": mr, "spatial_cv": ms}
+        print(f"  {t:8s} {mr['r2']:>9.3f} {ms['r2']:>10.3f} {mr['rmse']:>7.1f} {mr['mae']:>6.1f}   (target {bench})")
     Path("outputs").mkdir(exist_ok=True)
     json.dump(report, open("outputs/real_validation.json", "w"), indent=2)
 
-    # real AQI map -> web
+    # ---- real seasonal AQI map -> web ----
     print("\ngenerating real AQI map …")
-    model = HybridModel(TARGETS, features).fit(training)
-    gdf = add_engineered_features(stack.isel(time=0).to_dataframe().reset_index().assign(date=pd.Timestamp(START)))
+    models = {t: fit_rf(training.dropna(subset=[t]), t) for t in TARGETS if training[t].notna().sum() > 100}
+    gdf = add_engineered_features(fetch_map_grid(cfg).assign(date=pd.Timestamp(START)))
     for c in features:
         if c not in gdf:
             gdf[c] = 0.0
-    pred = model.predict(gdf)
-    conc = {e: pred[c].to_numpy() for e, c in AQI_MAP.items() if c in pred}
+    Xg = gdf[features].fillna(0.0)
+    conc = {e: models[c].predict(Xg) for e, c in AQI_MAP.items() if c in models}
     out = engine.compute_grid(conc)
     lon, lat = gdf["lon"].to_numpy(), gdf["lat"].to_numpy()
     from matplotlib.path import Path as MplPath
