@@ -1,4 +1,4 @@
-.PHONY: help setup auth demo ingest preprocess database train aqi hcho transport dashboard test lint clean
+.PHONY: help setup auth demo check-ingest ingest preprocess database train aqi hcho transport dashboard test lint clean
 
 CONFIG ?= config/config.yaml
 PY     := python
@@ -18,6 +18,9 @@ demo:         ## Run the FULL pipeline end-to-end on synthetic data (no credenti
 
 demo-fast:    ## Quick smoke run of the full pipeline
 	$(PY) pipelines/run_demo.py --fast
+
+check-ingest: ## Show which ingestion deps / credentials / inputs are ready
+	$(PY) pipelines/check_ingest.py
 
 ingest:       ## Phase 2: download all datasets (GEE + INSAT/MOSDAC + CPCB)
 	$(PY) pipelines/01_ingest.py --config $(CONFIG)

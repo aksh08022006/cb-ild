@@ -39,9 +39,6 @@ esda>=2.5               # Getis-Ord Gi* (PySAL)
 libpysal>=4.10          # spatial weights for Gi*
 pointpats>=2.4
 
-# Explainability
-shap>=0.44
-
 # Transport / trajectories
 # pysplit / HYSPLIT are installed separately (see docs/13_transport_analysis.md)
 windrose>=1.9
