@@ -1,13 +1,12 @@
-"""HCHO hotspot detection, attribution and relationships (Phases 9-13).
+"""HCHO hotspot detection, attribution and transport (Objective 2).
 
-Detection (Phase 9):
-    phv             PHV = centre / mean(8 neighbours)   [Dong et al. 2026]
-    percentile      P95 threshold
-    getis_ord       Getis-Ord Gi* statistically-significant clusters
-    dbscan_hotspots density-based clustering of high-HCHO pixels
+Detection (two complementary methods -- "statistical thresholds or clustering"):
+    phv             PHV = centre / mean(8 neighbours), >1 = anomaly [Dong et al. 2026]
+    getis_ord       Getis-Ord Gi* statistically-significant clusters (FDR-corrected)
 
 Interpretation:
-    source_attribution   classify hotspots: urban / industrial / agri / forest
-    ozone_relationship   HCHO-O3 correlation, lag, HCHO/NO2 (FNR) regime
-    transport            wind-driven transport / trajectory analysis
+    source_attribution   connected_clusters(mask) -> attribute: urban / industrial /
+                         agri_burning / forest_fire / biogenic (IGP = anthropogenic-
+                         dominated, Kuttippurath 2022)
+    transport            ERA5 back-trajectories + VIIRS fire-pixel intersection
 """

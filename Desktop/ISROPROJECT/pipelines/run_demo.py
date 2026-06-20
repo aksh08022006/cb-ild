@@ -1,21 +1,25 @@
 #!/usr/bin/env python
-"""End-to-end demonstration of the FULL pipeline on synthetic India data.
+"""End-to-end demonstration of the FULL redesigned pipeline on synthetic India data.
 
-Runs every phase with no external credentials, producing real artifacts:
-  Phase 2-3  synthetic ingestion -> unified database (collocated training table)
-  Phase 5    feature engineering (FNR, cyclical time, interactions)
-  Phase 6-7  RF + XGBoost baselines AND a CNN-LSTM, with random/spatial/temporal CV
-  Phase 8-9  surface-pollutant prediction -> CPCB AQI -> India AQI maps
-  Phase 10   HCHO hotspots (PHV / Getis-Ord Gi* / DBSCAN / P95) + source attribution
-  Phase 11   fire density map
-  Phase 12   HCHO-O3 correlation / cross-correlation / FNR regimes
-  Phase 13   wind back-trajectory + fires-along-path + wind rose
+Runs every stage with no external credentials, producing real artifacts and
+exercising the 6 redesign changes (see docs/REDESIGN_PLAN.md):
+
+  [1] synthetic ingestion -> stack + stations + observations + fires
+  [2] AOD gap-fill        inject ~clustered missingness, fill with RF + clustered CV   (Change 1)
+  [3] collocate + features unified training table (FNR, cyclical time, lags)
+  [4] NO2 calibration     TROPOMI column -> CPCB surface NO2 (regression)              (Change 2)
+  [5] hybrid model        trend (RF) + kriged residual; trend-vs-hybrid + benchmark    (Changes 3,6)
+  [6] PM2.5 3-scheme CV   random vs spatial vs temporal (autocorrelation leakage)      (Change 6)
+  [7] CNN-LSTM            the ISRO-specified spatio-temporal learner
+  [8] dual AQI atlas      CPCB (Main) + RAPI (USP) + RAPI-CPCB divergence maps          (dual index)
+  [9] HCHO hotspots       PHV + Getis-Ord Gi* -> connected clusters -> attribution     (Change 5)
+  [10] transport          ERA5 back-trajectory + VIIRS fires-along-path
 
     python pipelines/run_demo.py            # full demo (~few minutes)
     python pipelines/run_demo.py --fast     # tiny/quick smoke run
 
-Replacing synthetic data with real downloads (ingestion modules) leaves every
-stage below unchanged.
+Swapping synthetic -> real data means only providing credentials + running the
+ingestion modules; every downstream stage below is unchanged.
 """
 
 from __future__ import annotations
@@ -32,7 +36,10 @@ from isro_aqi.aqi import AQIEngine
 from isro_aqi.database.schema import PREDICTORS
 from isro_aqi.features import add_engineered_features
 from isro_aqi.models import baselines
+from isro_aqi.models.hybrid import INDIA_BENCHMARK_R2, HybridModel, evaluate_trend_vs_hybrid
+from isro_aqi.preprocessing.calibrate_no2 import NO2Calibrator
 from isro_aqi.preprocessing.collocate import join_targets, sample_at_stations
+from isro_aqi.preprocessing.gapfill_aod import fill_aod_stack, inject_aod_gaps
 from isro_aqi.synthetic import SyntheticConfig, generate_all
 from isro_aqi.utils.geo import Grid
 from isro_aqi.utils.io import ensure_dir, write_parquet
@@ -42,7 +49,9 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 log = get_logger("demo")
 
 TARGETS = ["pm25", "pm10", "no2_obs", "so2_obs", "o3_obs", "co_obs"]
-AQI_MAP = {"pm25": "pm25", "pm10": "pm10", "no2": "no2_obs", "o3": "o3_obs", "co": "co_obs"}
+# engine pollutant -> training/target column
+AQI_MAP = {"pm25": "pm25", "pm10": "pm10", "no2": "no2_obs",
+           "so2": "so2_obs", "o3": "o3_obs", "co": "co_obs"}
 FIG = "outputs/figures"
 MAP = "outputs/maps"
 
@@ -63,16 +72,14 @@ def main():
 
     for d in (FIG, MAP, "data/interim", "data/processed", "models", "outputs"):
         ensure_dir(d)
-
     summary: dict = {}
 
-    # ----- load AQI breakpoints + regions (from config files directly) -----
     import yaml
     bp = yaml.safe_load(open("config/aqi_breakpoints.yaml"))
     regions = yaml.safe_load(open("config/regions.yaml"))
     engine = AQIEngine(bp)
 
-    # ===== Phase 2-3: synthetic ingestion -> database ======================
+    # ===== [1] synthetic ingestion ========================================
     scfg = SyntheticConfig(
         resolution_deg=1.0 if args.fast else 0.5,
         n_days=15 if args.fast else 60,
@@ -83,13 +90,20 @@ def main():
     stack, stations, obs, fires = data["stack"], data["stations"], data["observations"], data["fires"]
     grid = Grid(scfg.bbox, scfg.resolution_deg)
 
+    # ===== [2] AOD gap-fill (Change 1) ====================================
+    log.info("[2/10] AOD gap-fill: inject clustered missingness + RF fill")
+    gappy = inject_aod_gaps(stack, frac=0.3, seed=scfg.seed)
+    stack, gf_report = fill_aod_stack(gappy, report_cv=not args.fast)
+    summary["aod_gapfill"] = {k: gf_report[k] for k in gf_report if k != "covariates"}
+    log.info(f"   missing {gf_report['missing_frac']*100:.0f}% filled; "
+             f"clustered-CV r2={gf_report.get('cv_r2')}")
+
     write_parquet(stations, "data/processed/stations.parquet")
     write_parquet(obs, "data/processed/cpcb_daily.parquet")
     write_parquet(fires, "data/processed/fire_pixels.parquet")
     stack.to_netcdf("data/interim/daily.nc")
-    log.info(f"saved stack {dict(stack.sizes)}, {len(stations)} stations, {len(obs):,} obs")
 
-    # collocate + join targets + engineer features  (Phase 4-5)
+    # ===== [3] collocate + features =======================================
     predictors = sample_at_stations(stack, stations)
     training = join_targets(predictors, obs)
     training = add_engineered_features(training, lag_cols=None)
@@ -97,59 +111,55 @@ def main():
     write_parquet(training, "data/processed/training.parquet")
     summary["training_rows"] = int(len(training))
     summary["n_features"] = len(features)
-    log.info(f"[2/10] training table: {len(training):,} rows x {len(features)} features")
+    log.info(f"[3/10] training table: {len(training):,} rows x {len(features)} features")
 
-    # ===== Phase 6-7: models + 3-scheme validation =========================
+    # ===== [4] NO2 calibration (Change 2) =================================
+    log.info("[4/10] TROPOMI NO2 -> surface calibration")
+    cal = NO2Calibrator().fit(training)
+    summary["no2_calibration"] = cal.report(training)
+    cal.save("models/no2_calibration.joblib")
+    log.info(f"   surface-NO2 r2={summary['no2_calibration']['r2']:.3f} "
+             f"(raw column r2={summary['no2_calibration'].get('raw_column_r2')})")
+
+    # ===== [5] hybrid trend + kriging residual (Changes 3, 6) =============
     tr, te = _date_split(training, 0.2)
-    log.info(f"[3/10] training RF + XGBoost (temporal split {len(tr):,}/{len(te):,})")
-    rf = baselines.RandomForestModel(TARGETS, features, n_estimators=150, max_depth=20).fit(tr)
-    xgb = baselines.XGBoostModel(TARGETS, features, n_estimators=400).fit(tr)
-
-    rf_pred, xgb_pred = rf.predict(te), xgb.predict(te)
-    metrics_tbl = {}
+    log.info(f"[5/10] hybrid (RF trend + kriged residual); split {len(tr):,}/{len(te):,}")
+    summary["hybrid"] = evaluate_trend_vs_hybrid(tr, te, TARGETS, features)
     for t in TARGETS:
-        metrics_tbl[t] = {
-            "RF": baselines.metrics(te[t].to_numpy(), rf_pred[t].to_numpy()),
-            "XGB": baselines.metrics(te[t].to_numpy(), xgb_pred[t].to_numpy()),
-        }
-        log.info(f"   {t:8s} RF R2={metrics_tbl[t]['RF']['r2']:.3f} RMSE={metrics_tbl[t]['RF']['rmse']:.2f}"
-                 f" | XGB R2={metrics_tbl[t]['XGB']['r2']:.3f}")
-    summary["metrics"] = metrics_tbl
-    rf.save("models/rf.joblib")
-    xgb.save("models/xgb.joblib")
+        m = summary["hybrid"].get(t)
+        if m:
+            log.info(f"   {t:8s} trend R2={m['trend']['r2']:.3f} -> hybrid R2={m['hybrid']['r2']:.3f}"
+                     f" (India target {m['benchmark_r2']})")
 
-    # random vs spatial vs temporal CV for PM2.5 (the [Wang 2023] point)
+    # ===== [6] PM2.5 3-scheme CV (Change 6) ===============================
     summary["cv_pm25"] = _cv_comparison(training, features)
-    log.info(f"[4/10] PM2.5 CV R2 -> random {summary['cv_pm25']['random']:.3f} | "
+    log.info(f"[6/10] PM2.5 CV R2 -> random {summary['cv_pm25']['random']:.3f} | "
              f"spatial {summary['cv_pm25']['spatial']:.3f} | temporal {summary['cv_pm25']['temporal']:.3f}")
 
-    # CNN-LSTM (small) on spatial patches
+    # ===== [7] CNN-LSTM (ISRO-specified learner) ==========================
     summary["cnn_lstm"] = _train_cnn_lstm(stack, training, grid, args.fast)
-    log.info(f"[5/10] CNN-LSTM val metrics: "
+    log.info("[7/10] CNN-LSTM val: "
              + ", ".join(f"{k} R2={v['r2']:.2f}" for k, v in summary["cnn_lstm"].items()))
 
-    # ===== Phase 8-9: predict pollutants -> AQI -> maps ====================
-    log.info("[6/10] generating AQI maps")
-    burn_idx = int(np.argmax([float(stack["frp_mean"].isel(time=i).mean()) for i in range(stack.sizes["time"])]))
-    summary["aqi"] = _aqi_maps(stack, rf, features, engine, grid, burn_idx)
+    # ===== [8] dual AQI atlas: CPCB + RAPI + divergence ===================
+    log.info("[8/10] dual AQI atlas (CPCB Main + RAPI USP + divergence)")
+    hybrid_full = HybridModel(TARGETS, features).fit(training)
+    burn_idx = int(np.argmax([float(stack["frp_mean"].isel(time=i).mean())
+                              for i in range(stack.sizes["time"])]))
+    summary["aqi"] = _aqi_maps(stack, hybrid_full, features, engine, burn_idx)
 
-    # ===== Phase 10-11: HCHO hotspots + attribution + fire map =============
-    log.info("[7/10] HCHO hotspot detection + attribution")
-    summary["hcho"] = _hcho_analysis(stack, fires, regions, grid)
+    # ===== [9] HCHO hotspots (Change 5) ===================================
+    log.info("[9/10] HCHO hotspots: PHV + Gi* -> connected clusters -> attribution")
+    summary["hcho"] = _hcho_analysis(stack, fires, regions)
 
-    # ===== Phase 12: HCHO-O3 relationship ==================================
-    log.info("[8/10] HCHO-O3 relationship + FNR regimes")
-    summary["ozone"] = _ozone(training, stack, stations)
-
-    # ===== Phase 13: transport =============================================
-    log.info("[9/9] transport: back-trajectory + fires-along-path")
+    # ===== [10] transport =================================================
+    log.info("[10/10] transport: back-trajectory + fires-along-path")
     summary["transport"] = _transport(stack, fires)
 
-    # ----- write summary ---------------------------------------------------
     with open("outputs/demo_summary.json", "w") as fh:
         json.dump(_jsonable(summary), fh, indent=2)
     _write_summary_md(summary)
-    log.info("DEMO COMPLETE -> see outputs/ (figures, maps, demo_summary.md)")
+    log.info("DEMO COMPLETE -> see outputs/ (maps, figures, demo_summary.md)")
 
 
 # --------------------------------------------------------------------------- #
@@ -158,15 +168,12 @@ def _cv_comparison(training, features, target="pm25"):
 
     from isro_aqi.models.train import spatial_blocks
     df = training.dropna(subset=[target])
-    # random
     a, b = train_test_split(df, test_size=0.2, random_state=0)
     m = baselines.RandomForestModel([target], features, n_estimators=150).fit(a)
     r_random = baselines.metrics(b[target].to_numpy(), m.predict(b)[target].to_numpy())["r2"]
-    # spatial (one held-out block fold)
     tr, va = next(spatial_blocks(df, block_deg=2.0, k=5))
     m = baselines.RandomForestModel([target], features, n_estimators=150).fit(tr)
     r_spatial = baselines.metrics(va[target].to_numpy(), m.predict(va)[target].to_numpy())["r2"]
-    # temporal
     tr, te = _date_split(df, 0.2)
     m = baselines.RandomForestModel([target], features, n_estimators=150).fit(tr)
     r_temporal = baselines.metrics(te[target].to_numpy(), m.predict(te)[target].to_numpy())["r2"]
@@ -204,7 +211,6 @@ def _train_cnn_lstm(stack, training, grid, fast):
 
 
 def _eval_cnn_lstm(model, ds_va, tmean, tstd):
-    """De-standardised per-target metrics for the CNN-LSTM (interpretable R2/RMSE)."""
     import torch
     from torch.utils.data import DataLoader
 
@@ -221,15 +227,19 @@ def _eval_cnn_lstm(model, ds_va, tmean, tstd):
     return {t: baselines.metrics(Y[:, i], P[:, i]) for i, t in enumerate(TARGETS)}
 
 
-def _predict_grid(day_ds, rf, features, date):
-    """Predict pollutant grids for one day's Dataset -> dict of 2-D arrays."""
+def _predict_grid(day_ds, model, features, date):
+    """Predict pollutant grids for one day's Dataset -> dict of 2-D arrays.
+
+    `model` is any object with .predict(df)->DataFrame (RF or HybridModel); the
+    hybrid additionally uses the lon/lat columns for the kriged residual.
+    """
     df = day_ds.to_dataframe().reset_index()
     df["date"] = pd.Timestamp(date)
     df = add_engineered_features(df, lag_cols=None)
     for c in features:
         if c not in df:
             df[c] = 0.0
-    pred = rf.predict(df)
+    pred = model.predict(df)
     lat, lon = day_ds["lat"].values, day_ds["lon"].values
     out = {}
     for t in pred.columns:
@@ -238,51 +248,64 @@ def _predict_grid(day_ds, rf, features, date):
     return out, lat, lon
 
 
-def _aqi_maps(stack, rf, features, engine, grid, burn_idx):
+def _aqi_maps(stack, model, features, engine, burn_idx):
     from isro_aqi.viz.maps import aqi_map, scalar_map
 
     date = pd.to_datetime(stack["time"].values[burn_idx])
-    grids, lat, lon = _predict_grid(stack.isel(time=burn_idx), rf, features, date)
+    grids, lat, lon = _predict_grid(stack.isel(time=burn_idx), model, features, date)
     conc = {eng: grids[col] for eng, col in AQI_MAP.items() if col in grids}
-    aqi, dom = engine.aqi_grid(conc)
-    aqi_da = xr.DataArray(aqi, coords={"lat": lat, "lon": lon}, dims=("lat", "lon"))
-    aqi_map(aqi_da, title=f"Surface AQI (synthetic) {date.date()}", out_path=f"{MAP}/aqi_{date.date()}.png")
-    scalar_map(xr.DataArray(grids["pm25"], coords={"lat": lat, "lon": lon}, dims=("lat", "lon")),
+    out = engine.compute_grid(conc)              # cpcb, rapi, dominant, divergence
+    coords = {"lat": lat, "lon": lon}
+
+    cpcb_da = xr.DataArray(out["cpcb"], coords=coords, dims=("lat", "lon"))
+    rapi_da = xr.DataArray(out["rapi"], coords=coords, dims=("lat", "lon"))
+    div_da = xr.DataArray(out["divergence"], coords=coords, dims=("lat", "lon"))
+
+    # Main view: CPCB headline (official compliance)
+    aqi_map(cpcb_da, title=f"Surface AQI — CPCB (Main view) {date.date()}",
+            out_path=f"{MAP}/aqi_cpcb_{date.date()}.png")
+    # USP view: RAPI headline (entropy multi-pollutant), same CPCB ramp
+    aqi_map(rapi_da, title=f"Surface AQI — RAPI entropy (USP view) {date.date()}",
+            out_path=f"{MAP}/aqi_rapi_{date.date()}.png")
+    # Divergence: where RAPI reclassifies cells the CPCB max rule misses
+    scalar_map(div_da, title=f"RAPI − CPCB divergence {date.date()}", cmap="magma",
+               label="RAPI − CPCB", out_path=f"{MAP}/aqi_divergence_{date.date()}.png")
+    scalar_map(xr.DataArray(grids["pm25"], coords=coords, dims=("lat", "lon")),
                title=f"Predicted PM2.5 {date.date()}", cmap="magma_r", label="PM2.5 (ug/m3)",
                out_path=f"{MAP}/pm25_{date.date()}.png")
 
-    # seasonal-mean AQI (AQI of seasonal-mean concentrations)
+    # seasonal-mean CPCB AQI
     mean_ds = stack.mean("time")
-    mgrids, mlat, mlon = _predict_grid(mean_ds, rf, features, date)
+    mgrids, mlat, mlon = _predict_grid(mean_ds, model, features, date)
     mconc = {eng: mgrids[col] for eng, col in AQI_MAP.items() if col in mgrids}
-    maqi, _ = engine.aqi_grid(mconc)
-    maqi_da = xr.DataArray(maqi, coords={"lat": mlat, "lon": mlon}, dims=("lat", "lon"))
-    aqi_map(maqi_da, title="Seasonal-mean Surface AQI (synthetic)", out_path=f"{MAP}/aqi_seasonal_mean.png")
+    mcpcb = engine.aqi_grid(mconc)[0]
+    aqi_map(xr.DataArray(mcpcb, coords={"lat": mlat, "lon": mlon}, dims=("lat", "lon")),
+            title="Seasonal-mean Surface AQI — CPCB", out_path=f"{MAP}/aqi_seasonal_mean.png")
 
-    finite = aqi[np.isfinite(aqi)]
+    cpcb = out["cpcb"]
     cats = {}
-    for v in finite:
+    for v in cpcb[np.isfinite(cpcb)]:
         c = engine.category(float(v))
         cats[c] = cats.get(c, 0) + 1
-    return {"date": str(date.date()), "aqi_mean": float(np.nanmean(aqi)),
-            "aqi_max": float(np.nanmax(aqi)), "category_cells": cats}
+    return {"date": str(date.date()),
+            "cpcb_mean": float(np.nanmean(cpcb)), "cpcb_max": float(np.nanmax(cpcb)),
+            "rapi_mean": float(np.nanmean(out["rapi"])),
+            "divergence_mean": float(np.nanmean(out["divergence"][np.isfinite(out["divergence"])])),
+            "category_cells": cats}
 
 
-def _hcho_analysis(stack, fires, regions, grid):
-    """HCHO hotspots on the burning-window composite.
+def _hcho_analysis(stack, fires, regions):
+    """HCHO hotspots on the burning-window composite (PHV + Gi*).
 
-    Hotspots are LOCAL enhancements, so we detect PHV anomaly (HVA) cells -- which
-    ignore the broad persistent haze and isolate sharp fire/urban/industrial
-    spikes -- then DBSCAN-cluster those cells and attribute each cluster. The
-    seasonal-mean field is used for the atlas map; PHV/Gi* run on the burning
-    window where the biomass-burning signal is strongest.
+    PHV isolates sharp local anomalies (fire/urban/industrial spikes) above the
+    broad haze; Gi* adds FDR-corrected statistical significance. PHV HVA cells are
+    grouped into clusters by connected components, then each is attributed.
     """
-    from isro_aqi.hcho import dbscan_hotspots, getis_ord, percentile, phv, source_attribution
+    from isro_aqi.hcho import getis_ord, phv, source_attribution
     from isro_aqi.viz.maps import fire_density_map, hcho_map
 
     res = {}
     spacing = float(stack.lon[1] - stack.lon[0])
-    # burning-window composite (peak +/- 5 days) -- "biomass burning period"
     burn_idx = int(np.argmax([float(stack["frp_mean"].isel(time=i).mean())
                               for i in range(stack.sizes["time"])]))
     lo, hi = max(0, burn_idx - 5), min(stack.sizes["time"], burn_idx + 6)
@@ -290,7 +313,6 @@ def _hcho_analysis(stack, fires, regions, grid):
     frp_burn = stack["frp_mean"].isel(time=slice(lo, hi)).max("time")
     hcho_season = stack["hcho"].mean("time")
 
-    # PHV local-anomaly detection
     ds_phv = phv.detect_hotspots(hcho_burn, phv_min=1.05, hva_threshold=8e15, to_molec_cm2=1.0)
     res["phv_pct"] = phv.phv_percent(ds_phv)
     res["phv_hva_cells"] = int(ds_phv["hva"].values.sum())
@@ -303,12 +325,9 @@ def _hcho_analysis(stack, fires, regions, grid):
         log.warning(f"Gi* skipped: {e}")
         res["gi_hotspot_cells"] = None
 
-    res["p95_threshold"] = float(percentile.percentile_threshold(hcho_burn, 95).attrs["threshold"])
-
-    # cluster the PHV HVA cells (local anomalies), then attribute
-    masked = hcho_burn.where(ds_phv["hva"])
-    clusters = dbscan_hotspots.cluster_hotspots(masked, threshold=0.0, eps_deg=2 * spacing, min_samples=2)
-    res["dbscan_clusters"] = int(len(clusters))
+    # connected-component clustering of the PHV HVA cells, then attribute
+    clusters = source_attribution.connected_clusters(ds_phv["hva"], hcho_burn)
+    res["clusters"] = int(len(clusters))
     if len(clusters):
         clusters["frp_mean"] = [float(frp_burn.sel(lon=r.lon, lat=r.lat, method="nearest"))
                                 for r in clusters.itertuples()]
@@ -325,25 +344,6 @@ def _hcho_analysis(stack, fires, regions, grid):
     return res
 
 
-def _ozone(training, stack, stations):
-    from isro_aqi.hcho import ozone_relationship as oz
-    from isro_aqi.viz.figures import hcho_o3_panel
-
-    corr = oz.correlation(training, hcho="hcho", o3="o3_obs")
-    fr = oz.fnr_regime(training, hcho="hcho", no2="no2", voc_limited_max=3.2, nox_limited_min=4.1)
-    regimes = fr["o3_regime"].value_counts().to_dict()
-    hcho_o3_panel(training, hcho="hcho", o3="o3_obs", out_path=f"{FIG}/hcho_o3_scatter.png")
-
-    # cross-correlation at the cell nearest Delhi
-    dlon, dlat = 77.10, 28.65
-    hser = stack["hcho"].sel(lon=dlon, lat=dlat, method="nearest").to_series()
-    oser = stack["o3"].sel(lon=dlon, lat=dlat, method="nearest").to_series()
-    xcorr = oz.cross_correlation(hser, oser, max_lag=7)
-    best = xcorr.loc[xcorr["r"].idxmax()]
-    return {"corr_r": corr["r"], "regimes": {str(k): int(v) for k, v in regimes.items()},
-            "xcorr_best_lag": int(best["lag_days"]), "xcorr_best_r": float(best["r"])}
-
-
 def _transport(stack, fires):
     from isro_aqi.hcho import transport
 
@@ -351,7 +351,7 @@ def _transport(stack, fires):
     winds = stack[["u_wind", "v_wind"]]
     path = transport.back_trajectory(winds, 77.10, 28.65, str(date), hours=48, dt_hours=3.0)
     path.to_csv("outputs/delhi_backtrajectory.csv", index=False)
-    n = transport.fires_along_path(path, fires.rename(columns={"longitude": "longitude", "latitude": "latitude"}), radius_km=150)
+    n = transport.fires_along_path(path, fires, radius_km=150)
     try:
         u = stack["u_wind"].sel(lon=77.1, lat=28.65, method="nearest").to_series()
         v = stack["v_wind"].sel(lon=77.1, lat=28.65, method="nearest").to_series()
@@ -373,29 +373,54 @@ def _jsonable(o):
 
 
 def _write_summary_md(s):
-    lines = ["# Demo run summary\n", "_Synthetic India data; demonstrates the full pipeline end-to-end._\n"]
+    lines = ["# Demo run summary\n",
+             "_Synthetic India data; exercises the full redesigned pipeline (6 changes)._\n"]
     lines.append(f"- Training rows: **{s['training_rows']:,}** | features: **{s['n_features']}**\n")
-    lines.append("\n## Surface-pollutant skill (temporal hold-out)\n")
-    lines.append("| Pollutant | RF R² | RF RMSE | XGB R² |\n|---|---|---|---|")
-    for t, m in s["metrics"].items():
-        lines.append(f"| {t} | {m['RF']['r2']:.3f} | {m['RF']['rmse']:.2f} | {m['XGB']['r2']:.3f} |")
+
+    gf = s["aod_gapfill"]
+    lines.append(f"\n## AOD gap-fill (Change 1)\n"
+                 f"- {gf['missing_frac']*100:.0f}% missing filled; clustered-holdout CV "
+                 f"r2={gf.get('cv_r2')}, rmse={gf.get('cv_rmse')}\n")
+
+    no2 = s["no2_calibration"]
+    lines.append(f"\n## TROPOMI NO2 calibration (Change 2)\n"
+                 f"- surface-NO2 r2 **{no2['r2']:.3f}** (raw column r2 {no2.get('raw_column_r2')}); "
+                 f"gain over raw column +{no2.get('r2_gain_over_raw_column')}\n")
+
+    lines.append("\n## Surface-pollutant skill — trend vs hybrid (Changes 3, 6)\n")
+    lines.append("| Pollutant | trend R² | hybrid R² | India target |\n|---|---|---|---|")
+    for t in TARGETS:
+        m = s["hybrid"].get(t)
+        if m:
+            lines.append(f"| {t} | {m['trend']['r2']:.3f} | {m['hybrid']['r2']:.3f} | {m['benchmark_r2']} |")
+
     cv = s["cv_pm25"]
     lines.append(f"\n## PM2.5 CV (random vs spatial vs temporal)\n"
                  f"- random **{cv['random']:.3f}**, spatial **{cv['spatial']:.3f}**, temporal **{cv['temporal']:.3f}** "
                  f"(spatial < random confirms autocorrelation leakage — Wang 2023).\n")
-    lines.append("\n## CNN-LSTM (val)\n")
+
+    lines.append("\n## CNN-LSTM (ISRO-specified learner, val)\n")
     lines.append(", ".join(f"{k} R²={v['r2']:.2f}" for k, v in s["cnn_lstm"].items()) + "\n")
-    lines.append(f"\n## AQI ({s['aqi']['date']})\nmean {s['aqi']['aqi_mean']:.0f}, max {s['aqi']['aqi_max']:.0f}; "
-                 f"category cells: {s['aqi']['category_cells']}\n")
-    lines.append(f"\n## HCHO hotspots\nPHV {s['hcho']['phv_pct']:.1f}% of cells ({s['hcho']['phv_hva_cells']} HVA); "
-                 f"Gi* {s['hcho'].get('gi_hotspot_cells')} cells; DBSCAN {s['hcho']['dbscan_clusters']} clusters; "
-                 f"attribution {s['hcho'].get('attribution')}\n")
-    lines.append(f"\n## HCHO-O3\nr={s['ozone']['corr_r']:.2f}; best lag {s['ozone']['xcorr_best_lag']}d "
-                 f"(r={s['ozone']['xcorr_best_r']:.2f}); FNR regimes {s['ozone']['regimes']}\n")
-    lines.append(f"\n## Transport\nDelhi 48h back-trajectory: {s['transport']['trajectory_points']} points, "
-                 f"{s['transport']['fires_along_path']} fires within 150 km of path\n")
-    lines.append("\n## Artifacts\n- `outputs/maps/` AQI + PM2.5 + HCHO + fire maps\n"
-                 "- `outputs/figures/` HCHO-O3 scatter, wind rose\n"
+
+    a = s["aqi"]
+    lines.append(f"\n## Dual AQI atlas — {a['date']} (dual index)\n"
+                 f"- **Main (CPCB):** mean {a['cpcb_mean']:.0f}, max {a['cpcb_max']:.0f}\n"
+                 f"- **USP (RAPI):** mean {a['rapi_mean']:.0f}; mean RAPI−CPCB divergence {a['divergence_mean']:.1f}\n"
+                 f"- category cells: {a['category_cells']}\n")
+
+    h = s["hcho"]
+    lines.append(f"\n## HCHO hotspots (Change 5)\n"
+                 f"- PHV {h['phv_pct']:.1f}% of cells ({h['phv_hva_cells']} HVA); "
+                 f"Gi* {h.get('gi_hotspot_cells')} cells; {h['clusters']} clusters; "
+                 f"attribution {h.get('attribution')}\n")
+
+    t = s["transport"]
+    lines.append(f"\n## Transport\n- Delhi 48h back-trajectory: {t['trajectory_points']} points, "
+                 f"{t['fires_along_path']} fires within 150 km of path\n")
+
+    lines.append("\n## Artifacts\n"
+                 "- `outputs/maps/` CPCB + RAPI + divergence + PM2.5 + HCHO + fire maps\n"
+                 "- `outputs/figures/` wind rose\n"
                  "- `outputs/*.csv` hotspots, trajectory\n")
     with open("outputs/demo_summary.md", "w") as fh:
         fh.write("\n".join(lines))

@@ -6,6 +6,28 @@
 
 ---
 
+> ## ⓘ Redesign status (current)
+> The pipeline has been re-scoped to the ISRO problem statement and the 4 reference
+> papers. **Current design** (see [`docs/REDESIGN_PLAN.md`](docs/REDESIGN_PLAN.md)
+> for the complete end-to-end spec):
+> 1. **AOD gap-fill** (RF; clustered-holdout CV) — MAIAC is ~41% missing; skipping
+>    it biases India PM2.5 +19.1% (Katoch 2023).
+> 2. **TROPOMI NO₂ bias-correction** (column → CPCB surface; regression-kriging).
+> 3. **Hybrid model** `C(s,t)=μ(s,t)+v(s,t)`: CNN-LSTM/RF trend **+** kriged station
+>    residuals (Wang/Shanghai). CNN-LSTM stays the ISRO-specified learner.
+> 4. **1 km backbone** (was 0.1°) — the India-competitive standard.
+> 5. **Dual AQI index**: CPCB max (Main / compliance) **+** Hong-Kong RAPI entropy
+>    (USP) **+** a `RAPI − CPCB` divergence map.
+> 6. **HCHO**: PHV + Getis-Ord Gi* (+ connected-component clusters), anthropogenic
+>    IGP attribution; **spatial-CV** R²/RMSE/MAE reported vs India benchmarks.
+>
+> **Removed as out-of-scope:** SHAP explainability, FNR ozone-regime analysis,
+> DBSCAN & P95 HCHO methods, the standalone CNN/LSTM models. Sections below describe
+> the original 14-phase scaffold; where they conflict with the six points above, the
+> redesign governs.
+
+---
+
 ## Table of Contents
 
 1. [What This Project Does](#1-what-this-project-does)

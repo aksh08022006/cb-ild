@@ -141,11 +141,18 @@ class AQIEngine:
         dominant = np.where(valid, dominant, None)
         return aqi, dominant
 
-    # --- optional entropy aggregation (Lu et al. 2011, RAPI) ---------------
+    # --- entropy aggregation (Lu et al. 2011, Hong Kong RAPI) --------------
     @staticmethod
     def aggregate_entropy(sub_indices: Iterable[float]) -> float:
         """Shannon-entropy-weighted aggregation -- accounts for co-occurring
-        pollutants instead of max-only. Publishable comparison vs. CPCB max.
+        pollutants instead of max-only (Lu et al. 2011, Hong Kong RAPI).
+
+            p_k  = I_k / sum(I)
+            H    = -sum(p_k ln p_k) / ln(K)          # normalised entropy 0..1
+            RAPI = max(I) * (1 + (mean(I)/max(I)) * H)
+
+        RAPI >= max(I): it is the CPCB max scaled up when co-pollutants are also
+        elevated. Equals max when only one pollutant carries the signal (H -> 0).
         """
         vals = np.array([s for s in sub_indices if s is not None and s > 0], dtype=float)
         if vals.size == 0:
@@ -153,3 +160,43 @@ class AQIEngine:
         p = vals / vals.sum()
         entropy = -np.sum(p * np.log(p + 1e-12)) / math.log(len(vals)) if len(vals) > 1 else 0.0
         return float(vals.max() * (1 + (vals.mean() / vals.max()) * entropy))
+
+    def rapi_grid(self, concentrations: dict[str, np.ndarray]) -> np.ndarray:
+        """Vectorised RAPI over gridded concentration arrays (Hong Kong [D]).
+
+        Same validity rules as ``aqi_grid``. Returns an array (NaN where invalid).
+        This is the per-pixel spatial form of ``aggregate_entropy``.
+        """
+        sis = {p: self._sub_index_vec(a, self.bp[p]) for p, a in concentrations.items() if p in self.bp}
+        names = list(sis)
+        stack = np.stack([sis[n] for n in names], axis=0)            # (P, ...)
+        valid = ~np.isnan(stack)
+        K = valid.sum(axis=0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            smax = np.nanmax(np.where(valid, stack, np.nan), axis=0)
+            ssum = np.nansum(np.where(valid, stack, 0.0), axis=0)
+            smean = np.nanmean(np.where(valid, stack, np.nan), axis=0)
+            shares = np.where(valid & (ssum > 0), stack / ssum, 0.0)
+            ent = -np.sum(np.where(shares > 0, shares * np.log(shares), 0.0), axis=0)
+            lnK = np.log(np.maximum(K, 1))
+            Hn = np.where(K > 1, ent / np.where(lnK == 0, 1.0, lnK), 0.0)
+            rapi = np.where(smax > 0, smax * (1 + (smean / np.where(smax == 0, 1.0, smax)) * Hn), 0.0)
+        has_mand = np.zeros(stack.shape[1:], dtype=bool)
+        for m in self.mandatory:
+            if m in sis:
+                has_mand |= ~np.isnan(sis[m])
+        valid_cells = (K >= self.min_pollutants) & has_mand
+        return np.where(valid_cells, rapi, np.nan)
+
+    def compute_grid(self, concentrations: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """Both indices + divergence in one call, for the dual-view atlas.
+
+        Returns dict with:
+            cpcb        max-aggregation AQI (official; the 'Main' view headline)
+            rapi        entropy-weighted RAPI (Hong Kong; the 'USP' view headline)
+            dominant    dominant pollutant per cell (object array; None if invalid)
+            divergence  rapi - cpcb  (>= 0 where valid; the headline novelty map)
+        """
+        cpcb, dominant = self.aqi_grid(concentrations)
+        rapi = self.rapi_grid(concentrations)
+        return {"cpcb": cpcb, "rapi": rapi, "dominant": dominant, "divergence": rapi - cpcb}

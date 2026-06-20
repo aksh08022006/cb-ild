@@ -17,12 +17,39 @@ urban/industrial zones.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+import xarray as xr
 
 from isro_aqi.utils.geo import haversine_km
 from isro_aqi.utils.logging import get_logger
 
 log = get_logger("attribution")
+
+
+def connected_clusters(mask: xr.DataArray, value: xr.DataArray | None = None) -> pd.DataFrame:
+    """Group adjacent hotspot cells into clusters via connected components.
+
+    A dependency-light replacement for DBSCAN that stays in the "statistical
+    threshold" family: take a boolean hotspot mask (from PHV HVA or Gi*), label
+    spatially-connected blobs, and return one centroid row per blob with lon/lat,
+    cell count and (optional) mean field value. Feeds source_attribution.attribute.
+    """
+    from scipy import ndimage
+
+    m = np.asarray(mask.values, dtype=bool)
+    labels, n = ndimage.label(m)
+    lons, lats = mask["lon"].values, mask["lat"].values
+    vals = None if value is None else np.asarray(value.values, dtype="float64")
+    rows = []
+    for k in range(1, n + 1):
+        ys, xs = np.where(labels == k)
+        rec = {"lon": float(lons[xs].mean()), "lat": float(lats[ys].mean()),
+               "n_cells": int(len(xs))}
+        if vals is not None:
+            rec["hcho_value"] = float(np.nanmean(vals[ys, xs]))
+        rows.append(rec)
+    return pd.DataFrame(rows, columns=["lon", "lat", "n_cells"] + (["hcho_value"] if value is not None else []))
 
 
 def _in_bbox(lon, lat, bbox) -> bool:

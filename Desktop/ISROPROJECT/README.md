@@ -28,19 +28,25 @@ formaldehyde (HCHO) hotspots driven by VOC emissions and biomass burning.
 ## Architecture
 
 ```
- CPCB stations ─┐
- INSAT-3D AOD ──┤
- TROPOMI gases ─┤
- ERA5 met ──────┼──▶ Feature engineering ──▶ CNN-LSTM ──▶ Surface pollutants ──▶ AQI engine ──▶ Daily AQI maps
- Land cover ────┤
- Elevation ─────┤
- Fire counts ───┘
+ INSAT-3D / MAIAC AOD ─┐  gap-fill (RF)      ┌─ trend  μ : CNN-LSTM / RF
+ TROPOMI gases ────────┤  NO2 calibration    │           +
+ ERA5 / IMDAA met ─────┼──▶ 1 km backbone ──▶┤  resid  v : kriged station residuals
+ CPCB stations ────────┤  + features         └─▶ C(s,t)=μ+v ─▶ AQI engine ─▶ daily maps
+ Land cover / DEM ─────┤                              │
+ Fire counts ──────────┘                       CPCB (Main) + RAPI (USP) + divergence
 
  TROPOMI HCHO ──┐
  VIIRS fires ───┤
- ERA5 winds ────┼──▶ Hotspot detection (PHV / Gi* / DBSCAN) ──▶ Source attribution ──▶ Transport analysis ──▶ HCHO Atlas
+ ERA5 winds ────┼──▶ PHV + Getis-Ord Gi* ──▶ connected clusters ──▶ source attribution ──▶ transport ──▶ HCHO Atlas
  Land cover ────┘
 ```
+
+> **Redesign:** the pipeline now adds AOD gap-filling (Change 1), TROPOMI-NO₂
+> bias-correction (Change 2), a trend + kriging-residual **hybrid** (Change 3) on a
+> **1 km** backbone (Change 4), a dual AQI index (CPCB max **+** Hong-Kong RAPI
+> entropy with a divergence map), PHV + Gi* HCHO detection (Change 5), and
+> spatial-CV reporting vs India benchmarks (Change 6). See
+> [`docs/REDESIGN_PLAN.md`](docs/REDESIGN_PLAN.md) for the full end-to-end spec.
 
 ## Phases (see [`docs/`](docs/))
 
